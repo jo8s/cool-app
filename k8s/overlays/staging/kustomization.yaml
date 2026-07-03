@@ -4,23 +4,23 @@ kind: Kustomization
 namespace: moetikeenjasaan-staging
 
 resources:
-  - ../../base
+- ../../base
 
 # CI (promote-staging job) sets this tag automatically after dev.
 images:
-  - name: app-image
-    newName: ghcr.io/jo8s/cool-app
-    newTag: latest
+- name: app-image
+  newName: ghcr.io/jo8s/cool-app
+  newTag: 63ce5254d5a32517b2f14f9531d7ca8054d007a7
 
 replicas:
-  - name: moetikeenjasaan
-    count: 1
+- count: 1
+  name: moetikeenjasaan
 
 patches:
-  - target:
-      kind: Ingress
-      name: moetikeenjasaan
-    patch: |-
-      - op: add
-        path: /spec/rules/0/host
-        value: staging.localhost
+- patch: |-
+    - op: add
+      path: /spec/rules/0/host
+      value: staging.localhost
+  target:
+    kind: Ingress
+    name: moetikeenjasaan
