@@ -92,13 +92,12 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
-          if ! git diff --quiet; then
-            git commit -am "ci(dev): deploy ${{ github.sha }} [skip ci]"
-            git push
-          else
-            echo "dev already on this tag."
+          if git diff --quiet; then
+            echo "dev already on this tag."; exit 0
           fi
+          git commit -am "ci(dev): deploy ${{ github.sha }} [skip ci]"
+          git pull --rebase origin main
+          git push
 
   # 4) Auto-promote the same image to staging.
   promote-staging:
@@ -119,13 +118,12 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
-          if ! git diff --quiet; then
-            git commit -am "ci(staging): promote ${{ github.sha }} [skip ci]"
-            git push
-          else
-            echo "staging already on this tag."
+          if git diff --quiet; then
+            echo "staging already on this tag."; exit 0
           fi
+          git commit -am "ci(staging): promote ${{ github.sha }} [skip ci]"
+          git pull --rebase origin main
+          git push
 
   # 5) Auto-open a PR that promotes the same image to prod. You review + merge;
   #    Argo CD then syncs prod. This is your manual approval gate.
