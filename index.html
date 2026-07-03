@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moet ik een jas aan?</title>
+<meta name="description" content="Het antwoord op de belangrijkste vraag van de dag: moet ik een jas aan?">
+<style>
+  :root {
+    --bg: #7fb2e6;
+    --fg: #ffffff;
+    --accent: rgba(255,255,255,0.85);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    text-align: center;
+    padding: 24px;
+    transition: background 0.6s ease;
+    overflow-x: hidden;
+  }
+  .emoji {
+    font-size: clamp(64px, 18vw, 140px);
+    line-height: 1;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.15));
+  }
+  .verdict {
+    font-size: clamp(40px, 12vw, 110px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 0.95;
+    text-shadow: 0 3px 16px rgba(0,0,0,0.18);
+  }
+  .reason {
+    font-size: clamp(18px, 4vw, 28px);
+    font-weight: 500;
+    margin-top: 18px;
+    max-width: 640px;
+    opacity: 0.95;
+  }
+  .details {
+    font-size: clamp(13px, 2.6vw, 16px);
+    margin-top: 14px;
+    opacity: 0.8;
+    font-weight: 500;
+  }
+  .place {
+    margin-top: 34px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: rgba(255,255,255,0.18);
+    border-radius: 999px;
+    padding: 6px 6px 6px 18px;
+    backdrop-filter: blur(6px);
+  }
+  .place input {
+    border: none;
+    background: transparent;
+    color: var(--fg);
+    font-size: 16px;
+    font-weight: 600;
+    width: 150px;
+    outline: none;
+  }
+  .place input::placeholder { color: rgba(255,255,255,0.7); }
+  .place button {
+    border: none;
+    cursor: pointer;
+    background: rgba(255,255,255,0.9);
+    color: #333;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 15px;
+    transition: transform 0.1s ease;
+  }
+  .place button:active { transform: scale(0.94); }
+  .geo {
+    margin-top: 12px;
+    background: none;
+    border: none;
+    color: var(--fg);
+    opacity: 0.8;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: underline;
+  }
+  .footer {
+    position: fixed;
+    bottom: 12px;
+    font-size: 12px;
+    opacity: 0.6;
+  }
+  .footer a { color: inherit; }
+  .loading .verdict { opacity: 0.5; }
+</style>
+</head>
+<body>
+  <div class="emoji" id="emoji">🤔</div>
+  <div class="verdict" id="verdict">Even kijken…</div>
+  <div class="reason" id="reason">De lucht wordt geraadpleegd.</div>
+  <div class="details" id="details"></div>
+
+  <div class="place">
+    <input id="city" type="text" placeholder="Plaats…" autocomplete="off">
+    <button id="go">Check</button>
+  </div>
+  <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
+
+  <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · gemaakt met liefde &amp; verveling</div>
+
+<script>
+// ---------- Coat logic ----------
+// Levels: 0 geen jas, 1 vestje, 2 jas, 3 winterjas, 4 blijf binnen
+const LEVELS = [
+  { label: "NEE",   sub: "Geen jas",     emoji: "😎", bg: "linear-gradient(160deg,#ffd85e,#ff9e3d)" },
+  { label: "VESTJE",sub: "Een vestje",   emoji: "🧥", bg: "linear-gradient(160deg,#9be36b,#4bb36b)" },
+  { label: "JA",    sub: "Gewoon een jas",emoji: "🧥", bg: "linear-gradient(160deg,#7fb2e6,#4a7fc0)" },
+  { label: "JA!",   sub: "Winterjas",    emoji: "🧣", bg: "linear-gradient(160deg,#6d8bb5,#3a4f6e)" },
+  { label: "BLIJF BINNEN", sub: "Serieus", emoji: "🥶", bg: "linear-gradient(160deg,#8fa8c8,#2a3550)" },
+];
+
+// WMO weather codes -> {rain, snow, thunder, desc}
+function classifyWeather(code) {
+  if (code >= 95) return { rain: true, snow: false, thunder: true, desc: "onweer" };
+  if (code >= 85) return { rain: false, snow: true, thunder: false, desc: "sneeuwbuien" };
+  if (code >= 80) return { rain: true, snow: false, thunder: false, desc: "regenbuien" };
+  if (code >= 71) return { rain: false, snow: true, thunder: false, desc: "sneeuw" };
+  if (code >= 61) return { rain: true, snow: false, thunder: false, desc: "regen" };
+  if (code >= 51) return { rain: true, snow: false, thunder: false, desc: "motregen" };
+  if (code >= 45) return { rain: false, snow: false, thunder: false, desc: "mist" };
+  if (code >= 1)  return { rain: false, snow: false, thunder: false, desc: "bewolkt" };
+  return { rain: false, snow: false, thunder: false, desc: "helder" };
+}
+
+// Core decision. Exposed for testing.
+function decide({ feels, temp, wind, weatherCode, rainSoonProb }) {
+  const w = classifyWeather(weatherCode);
+  // Note: Open-Meteo's apparent_temperature already includes wind chill,
+  // so we base the level on feels-like and only *mention* wind, not double-count it.
+  let level;
+  if (feels >= 19) level = 0;
+  else if (feels >= 13) level = 1;
+  else if (feels >= 7) level = 2;
+  else if (feels >= -3) level = 3;
+  else level = 4;
+
+  const reasons = [];
+  const windy = wind >= 25;
+  if (windy && (temp - feels) >= 3) {
+    reasons.push(`het waait flink (${Math.round(wind)} km/u)`);
+  }
+
+  // Snow -> at least winterjas
+  if (w.snow) { level = Math.max(level, 3); reasons.push(`het ${w.desc}t`); }
+  // Rain now -> at least jas + paraplu
+  let umbrella = false;
+  if (w.rain) { level = Math.max(level, 2); umbrella = true; reasons.push(`het regent (${w.desc})`); }
+  // Rain soon -> at least jas, take umbrella
+  else if (rainSoonProb >= 60) { level = Math.max(level, 2); umbrella = true; reasons.push(`straks ${rainSoonProb}% kans op regen`); }
+  else if (rainSoonProb >= 35) { umbrella = true; reasons.push(`kans op een bui (${rainSoonProb}%)`); }
+
+  return { level, umbrella, weather: w, reasons, feels, temp, wind };
+}
+
+// Build a Dutch one-liner from the decision.
+function phrase(d) {
+  const t = Math.round(d.feels);
+  const base = [
+    `Lekker weer joh — ${t}° en niks aan de hand.`,
+    `Een vestje is genoeg, ${t}° gevoelstemperatuur.`,
+    `Ja, gewoon een jas. Het voelt als ${t}°.`,
+    `Winterjas aan! Het voelt als ${t}°.`,
+    `Het voelt als ${t}°. Overweeg gewoon binnen te blijven.`,
+  ][d.level];
+
+  // Fun edge cases
+  let line = base;
+  if (d.level === 0 && d.feels >= 26) line = `Een jas?? Ben je gek. Het voelt als ${t}°. 🩳`;
+  if (d.level === 4 && d.feels <= -5) line = `Het voelt als ${t}°. Doe de deur maar dicht. 🥶`;
+
+  if (d.reasons.length) {
+    line += " (" + d.reasons.join(", ") + ")";
+  }
+  if (d.umbrella) line += " Neem een paraplu ☔.";
+  return line;
+}
+
+// ---------- UI wiring ----------
+const $ = id => document.getElementById(id);
+
+function render(place, d) {
+  const L = LEVELS[d.level];
+  document.body.style.setProperty("--bg", "#000");
+  document.body.style.background = L.bg;
+  $("emoji").textContent = L.emoji;
+  $("verdict").textContent = L.label;
+  $("reason").textContent = phrase(d);
+  $("details").textContent =
+    `${place} · ${Math.round(d.temp)}° (voelt als ${Math.round(d.feels)}°) · wind ${Math.round(d.wind)} km/u · ${d.weather.desc}`;
+  document.title = `${L.label} — moet ik een jas aan? (${place})`;
+}
+
+function setError(msg) {
+  $("emoji").textContent = "🤷";
+  $("verdict").textContent = "Geen idee";
+  $("reason").textContent = msg;
+  $("details").textContent = "";
+}
+
+async function geocode(name) {
+  const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=nl&format=json`);
+  const j = await r.json();
+  if (!j.results || !j.results.length) throw new Error("plaats niet gevonden");
+  const g = j.results[0];
+  return { lat: g.latitude, lon: g.longitude, label: [g.name, g.admin1].filter(Boolean).join(", ") };
+}
+
+async function fetchWeather(lat, lon) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m` +
+    `&hourly=precipitation_probability&forecast_hours=4&timezone=auto`;
+  const r = await fetch(url);
+  const j = await r.json();
+  const c = j.current;
+  const probs = (j.hourly && j.hourly.precipitation_probability) || [];
+  const rainSoonProb = probs.length ? Math.max(...probs.slice(0, 4).map(x => x || 0)) : 0;
+  return {
+    temp: c.temperature_2m,
+    feels: c.apparent_temperature,
+    wind: c.wind_speed_10m,
+    weatherCode: c.weather_code,
+    rainSoonProb,
+  };
+}
+
+async function run(name) {
+  $("verdict").textContent = "Even kijken…";
+  $("reason").textContent = `De lucht boven ${name} wordt geraadpleegd.`;
+  try {
+    const g = await geocode(name);
+    const w = await fetchWeather(g.lat, g.lon);
+    const d = decide(w);
+    render(g.label, d);
+    localStorage.setItem("jas_city", name);
+  } catch (e) {
+    setError("Kon het weer niet ophalen: " + e.message);
+  }
+}
+
+async function runCoords(lat, lon, label) {
+  try {
+    const w = await fetchWeather(lat, lon);
+    render(label, decide(w));
+  } catch (e) {
+    setError("Kon het weer niet ophalen: " + e.message);
+  }
+}
+
+$("go").addEventListener("click", () => { const v = $("city").value.trim(); if (v) run(v); });
+$("city").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("geo").addEventListener("click", () => {
+  if (!navigator.geolocation) { setError("Je browser deelt geen locatie."); return; }
+  $("reason").textContent = "Locatie ophalen…";
+  navigator.geolocation.getCurrentPosition(
+    p => runCoords(p.coords.latitude, p.coords.longitude, "jouw locatie"),
+    () => setError("Geen toegang tot locatie. Typ je plaats hierboven.")
+  );
+});
+
+// Start: last used city, or Amsterdam
+const start = localStorage.getItem("jas_city") || "Amsterdam";
+$("city").value = start;
+run(start);
+</script>
+</body>
+</html>

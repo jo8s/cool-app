@@ -1,0 +1,10 @@
+.git
+.github
+k8s
+argocd
+scripts
+kind-config.yaml
+config.env
+config.env.example
+README.md
+*.md

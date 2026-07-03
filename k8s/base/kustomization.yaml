@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: moetikeenjasaan
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# CI runs `kustomize edit set image app-image=ghcr.io/<owner>/<repo>:<sha>`,
+# which rewrites the fields below. render.sh sets the initial newName.
+images:
+  - name: app-image
+    newName: ghcr.io/jo8s/cool-app
+    newTag: latest
