@@ -4,13 +4,13 @@ kind: Kustomization
 namespace: moetikeenjasaan
 
 resources:
-  - deployment.yaml
-  - service.yaml
-  - ingress.yaml
+- deployment.yaml
+- service.yaml
+- ingress.yaml
 
 # CI runs `kustomize edit set image app-image=ghcr.io/<owner>/<repo>:<sha>`,
 # which rewrites the fields below. render.sh sets the initial newName.
 images:
-  - name: app-image
-    newName: ghcr.io/jo8s/cool-app
-    newTag: latest
+- name: app-image
+  newName: ghcr.io/jo8s/cool-app
+  newTag: 9a143422d81ff1f43610da4a9b5caaee214078ca
