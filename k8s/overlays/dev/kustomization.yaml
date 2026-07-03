@@ -4,24 +4,24 @@ kind: Kustomization
 namespace: moetikeenjasaan-dev
 
 resources:
-  - ../../base
+- ../../base
 
 # CI (deploy-dev job) runs `kustomize edit set image app-image=...:<sha>` here.
 images:
-  - name: app-image
-    newName: ghcr.io/jo8s/cool-app
-    newTag: latest
+- name: app-image
+  newName: ghcr.io/jo8s/cool-app
+  newTag: 63ce5254d5a32517b2f14f9531d7ca8054d007a7
 
 replicas:
-  - name: moetikeenjasaan
-    count: 1
+- count: 1
+  name: moetikeenjasaan
 
 # Give this environment its own hostname.
 patches:
-  - target:
-      kind: Ingress
-      name: moetikeenjasaan
-    patch: |-
-      - op: add
-        path: /spec/rules/0/host
-        value: dev.localhost
+- patch: |-
+    - op: add
+      path: /spec/rules/0/host
+      value: dev.localhost
+  target:
+    kind: Ingress
+    name: moetikeenjasaan
