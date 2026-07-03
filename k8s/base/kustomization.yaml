@@ -13,4 +13,4 @@ resources:
 images:
 - name: app-image
   newName: ghcr.io/jo8s/cool-app
-  newTag: 9a143422d81ff1f43610da4a9b5caaee214078ca
+  newTag: a041476ae60df2e5bcfc344cfa0614819d2097d7
