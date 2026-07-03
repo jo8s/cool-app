@@ -19,8 +19,10 @@ OWNER_LC="$(printf '%s' "$GITHUB_OWNER" | tr '[:upper:]' '[:lower:]')"
 REPO_LC="$(printf '%s' "$GITHUB_REPO" | tr '[:upper:]' '[:lower:]')"
 
 FILES=(
-  "k8s/base/kustomization.yaml"
-  "argocd/application.yaml"
+  "k8s/overlays/dev/kustomization.yaml"
+  "k8s/overlays/staging/kustomization.yaml"
+  "k8s/overlays/prod/kustomization.yaml"
+  "argocd/applicationset.yaml"
 )
 
 for f in "${FILES[@]}"; do

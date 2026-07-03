@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-shot local bootstrap:
+# One-shot local bootstrap for the dev/staging/prod GitOps setup:
 #   1. create a clean kind cluster (Podman provider) with ingress port mappings
 #   2. install ingress-nginx (kind variant)
-#   3. install Argo CD
-#   4. create the app namespace + private ghcr image-pull secret
+#   3. install Argo CD (+ expose it via ingress in insecure mode)
+#   4. create the three app namespaces + private ghcr image-pull secrets
 #   5. register the private git repo with Argo CD
-#   6. apply the Argo CD Application (which syncs the app in)
+#   6. apply the ApplicationSet (generates dev/staging/prod Applications)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -20,8 +20,7 @@ fi
 : "${GITHUB_PAT:?Set GITHUB_PAT (a PAT with repo + read:packages)}"
 
 CLUSTER="cool-app"
-APP_NS="moetikeenjasaan"
-OWNER_LC="$(printf '%s' "$GITHUB_OWNER" | tr '[:upper:]' '[:lower:]')"
+APP_NAMESPACES=(moetikeenjasaan-dev moetikeenjasaan-staging moetikeenjasaan-prod)
 
 # kind + Podman: kind needs to be told to use the podman provider.
 export KIND_EXPERIMENTAL_PROVIDER=podman
@@ -42,18 +41,29 @@ kubectl -n ingress-nginx wait --for=condition=ready pod \
 
 echo "==> [3/6] Installing Argo CD"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# server-side apply: the ApplicationSet CRD is too large for client-side apply.
+kubectl apply --server-side --force-conflicts -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 echo "    waiting for Argo CD server..."
 kubectl -n argocd wait --for=condition=available deployment/argocd-server --timeout=300s
 
-echo "==> [4/6] Creating app namespace + ghcr image-pull secret"
-kubectl create namespace "$APP_NS" --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n "$APP_NS" create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io \
-  --docker-username="$GITHUB_OWNER" \
-  --docker-password="$GITHUB_PAT" \
-  --docker-email="unused@example.com" \
-  --dry-run=client -o yaml | kubectl apply -f -
+echo "    exposing Argo CD via ingress (insecure mode for nginx TLS termination)"
+kubectl -n argocd patch configmap argocd-cmd-params-cm --type merge \
+  -p '{"data":{"server.insecure":"true"}}'
+kubectl -n argocd rollout restart deployment argocd-server
+kubectl -n argocd rollout status deployment argocd-server --timeout=180s
+kubectl apply -f argocd/ingress.yaml
+
+echo "==> [4/6] Creating app namespaces + ghcr image-pull secrets"
+for ns in "${APP_NAMESPACES[@]}"; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+  kubectl -n "$ns" create secret docker-registry ghcr-pull \
+    --docker-server=ghcr.io \
+    --docker-username="$GITHUB_OWNER" \
+    --docker-password="$GITHUB_PAT" \
+    --docker-email="unused@example.com" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
 
 echo "==> [5/6] Registering private repo with Argo CD"
 kubectl apply -f - <<EOF
@@ -71,29 +81,32 @@ stringData:
   password: ${GITHUB_PAT}
 EOF
 
-echo "==> [6/6] Applying Argo CD Application"
-kubectl apply -f argocd/application.yaml
+echo "==> [6/6] Applying Argo CD ApplicationSet (dev, staging, prod)"
+# Migrate off the old single-namespace app if it's still around.
+kubectl -n argocd delete application moetikeenjasaan --ignore-not-found
+kubectl delete namespace moetikeenjasaan --ignore-not-found
+kubectl apply -f argocd/applicationset.yaml
 
 cat <<EOF
 
 ============================================================
  Setup complete.
 
- App URL (after Argo syncs):   http://localhost/
+ Apps (after Argo syncs):
+   dev      http://dev.localhost:8080/
+   staging  http://staging.localhost:8080/
+   prod     http://moetikeenjasaan.nl:8080/   (needs an /etc/hosts entry:)
+              echo "127.0.0.1 moetikeenjasaan.nl www.moetikeenjasaan.nl" | sudo tee -a /etc/hosts
 
- Watch the sync:
-   kubectl -n ${APP_NS} get pods -w
+ Watch all envs:
+   kubectl get pods -A -l app=moetikeenjasaan -w
 
- Argo CD UI:
-   kubectl -n argocd port-forward svc/argocd-server 8080:443
-   open https://localhost:8080  (user: admin)
+ Argo CD UI (via ingress, no port-forward):
+   open http://argocd.localhost:8080  (user: admin)
    password:
      kubectl -n argocd get secret argocd-initial-admin-secret \\
        -o jsonpath='{.data.password}' | base64 -d; echo
 
- Note (rootless Podman): if binding host port 80 fails, allow it once:
-   echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kind.conf
-   sudo sysctl --system
- ...then re-run this script.
+ Ingress is mapped to high ports for rootless Podman (8080/8443).
 ============================================================
 EOF

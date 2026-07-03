@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: moetikeenjasaan-prod
+
+resources:
+  - ../../base
+
+# Only the manual "Promote to prod" workflow (with environment approval) edits
+# this tag. Argo CD then syncs prod to match.
+images:
+  - name: app-image
+    newName: ghcr.io/jo8s/cool-app
+    newTag: latest
+
+replicas:
+  - name: moetikeenjasaan
+    count: 2
+
+# Real domain: moetikeenjasaan.nl (+ www). Locally, map both to 127.0.0.1 in
+# /etc/hosts to test the prod overlay. For a public launch see README (needs a
+# public cluster, DNS records and cert-manager TLS).
+patches:
+  - target:
+      kind: Ingress
+      name: moetikeenjasaan
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: moetikeenjasaan.nl
+      - op: add
+        path: /spec/rules/-
+        value:
+          host: www.moetikeenjasaan.nl
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: moetikeenjasaan
+                    port:
+                      number: 80

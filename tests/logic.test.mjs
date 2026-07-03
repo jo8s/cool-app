@@ -1,0 +1,54 @@
+// Zero-dependency tests for index.html: structural sanity + coat-logic
+// correctness. Run with: node tests/logic.test.mjs
+import fs from "node:fs";
+
+const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+let fails = 0;
+const check = (name, cond) => {
+  console.log(`  ${cond ? "✓" : "✗"} ${name}`);
+  if (!cond) fails++;
+};
+
+console.log("Structure:");
+for (const id of ["verdict", "reason", "city", "geo", "details", "emoji"]) {
+  check(`has #${id}`, html.includes(`id="${id}"`));
+}
+check("calls Open-Meteo forecast", html.includes("api.open-meteo.com/v1/forecast"));
+check("uses geocoding API", html.includes("geocoding-api.open-meteo.com"));
+check("uses feels-like (apparent_temperature)", html.includes("apparent_temperature"));
+check("reads rain probability", html.includes("precipitation_probability"));
+check("has geolocation", html.includes("navigator.geolocation"));
+check("lang is Dutch", html.includes('lang="nl"'));
+
+// Extract the pure-logic block and evaluate it in isolation.
+const start = html.indexOf("const LEVELS");
+const end = html.indexOf("// ---------- UI wiring");
+check("logic block present", start !== -1 && end !== -1 && end > start);
+const code = html.slice(start, end);
+const { decide, phrase, LEVELS } = new Function(
+  code + "\nreturn { decide, phrase, LEVELS };"
+)();
+
+console.log("\nCoat logic (level: 0 geen jas … 4 blijf binnen):");
+const cases = [
+  { n: "hot 28°",        in: { feels: 28, temp: 29, wind: 8,  weatherCode: 0,  rainSoonProb: 0 },  level: 0, umbrella: false },
+  { n: "mild 16°",       in: { feels: 16, temp: 17, wind: 10, weatherCode: 2,  rainSoonProb: 10 }, level: 1 },
+  { n: "cool 11°",       in: { feels: 11, temp: 13, wind: 12, weatherCode: 3,  rainSoonProb: 20 }, level: 2 },
+  { n: "rain now 9°",    in: { feels: 9,  temp: 11, wind: 15, weatherCode: 63, rainSoonProb: 90 }, level: 2, umbrella: true },
+  { n: "rain soon 12°",  in: { feels: 12, temp: 13, wind: 14, weatherCode: 1,  rainSoonProb: 70 }, level: 2, umbrella: true },
+  { n: "snow -2°",       in: { feels: -2, temp: 0,  wind: 10, weatherCode: 73, rainSoonProb: 20 }, level: 3 },
+  { n: "freezing -8°",   in: { feels: -8, temp: -4, wind: 20, weatherCode: 0,  rainSoonProb: 0 },  level: 4 },
+];
+for (const c of cases) {
+  const d = decide(c.in);
+  check(`${c.n} -> ${LEVELS[c.level].label}`, d.level === c.level);
+  if ("umbrella" in c) check(`${c.n} -> umbrella=${c.umbrella}`, d.umbrella === c.umbrella);
+  const p = phrase(d);
+  check(`${c.n} -> phrase non-empty`, typeof p === "string" && p.length > 0);
+}
+
+// Invariant: level is always within range.
+check("levels within 0..4", cases.every((c) => decide(c.in).level >= 0 && decide(c.in).level <= 4));
+
+console.log(fails ? `\n❌ FAILED (${fails} check${fails > 1 ? "s" : ""})` : "\n✅ All tests passed.");
+process.exit(fails ? 1 : 0);
