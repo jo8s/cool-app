@@ -11,7 +11,7 @@ resources:
 images:
 - name: app-image
   newName: ghcr.io/jo8s/cool-app
-  newTag: 63ce5254d5a32517b2f14f9531d7ca8054d007a7
+  newTag: 2c6a4e70485286e66ca78d5b99272dd869cdb185
 
 replicas:
 - count: 2
@@ -21,23 +21,23 @@ replicas:
 # Tunnel (see k8s/cloudflared/ and README). Locally you can still test by
 # mapping both hosts to 127.0.0.1 in /etc/hosts.
 patches:
-  - target:
-      kind: Ingress
-      name: moetikeenjasaan
-    patch: |-
-      - op: add
-        path: /spec/rules/0/host
-        value: moetikmnjasaan.nl
-      - op: add
-        path: /spec/rules/-
-        value:
-          host: www.moetikmnjasaan.nl
-          http:
-            paths:
-              - path: /
-                pathType: Prefix
-                backend:
-                  service:
-                    name: moetikeenjasaan
-                    port:
-                      number: 80
+- patch: |-
+    - op: add
+      path: /spec/rules/0/host
+      value: moetikmnjasaan.nl
+    - op: add
+      path: /spec/rules/-
+      value:
+        host: www.moetikmnjasaan.nl
+        http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: moetikeenjasaan
+                  port:
+                    number: 80
+  target:
+    kind: Ingress
+    name: moetikeenjasaan
