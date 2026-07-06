@@ -17,27 +17,27 @@ replicas:
 - count: 2
   name: moetikeenjasaan
 
-# Real domain: moetikeenjasaan.nl (+ www). Locally, map both to 127.0.0.1 in
-# /etc/hosts to test the prod overlay. For a public launch see README (needs a
-# public cluster, DNS records and cert-manager TLS).
+# Real domain: moetikmnjasaan.nl (+ www). Publicly served via a Cloudflare
+# Tunnel (see k8s/cloudflared/ and README). Locally you can still test by
+# mapping both hosts to 127.0.0.1 in /etc/hosts.
 patches:
-- patch: |-
-    - op: add
-      path: /spec/rules/0/host
-      value: moetikeenjasaan.nl
-    - op: add
-      path: /spec/rules/-
-      value:
-        host: www.moetikeenjasaan.nl
-        http:
-          paths:
-            - path: /
-              pathType: Prefix
-              backend:
-                service:
-                  name: moetikeenjasaan
-                  port:
-                    number: 80
-  target:
-    kind: Ingress
-    name: moetikeenjasaan
+  - target:
+      kind: Ingress
+      name: moetikeenjasaan
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: moetikmnjasaan.nl
+      - op: add
+        path: /spec/rules/-
+        value:
+          host: www.moetikmnjasaan.nl
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: moetikeenjasaan
+                    port:
+                      number: 80

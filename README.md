@@ -16,7 +16,7 @@ This repo is also a complete **GitOps** demo: tested and containerized by GitHub
  Argo CD ApplicationSet ─► watches k8s/overlays/{dev,staging,prod}:
    dev      ns moetikeenjasaan-dev      · dev.localhost
    staging  ns moetikeenjasaan-staging  · staging.localhost
-   prod     ns moetikeenjasaan-prod     · moetikeenjasaan.nl
+   prod     ns moetikeenjasaan-prod     · moetikmnjasaan.nl
 ```
 
 Each environment is its own namespace + Kustomize overlay. CI writes the built image's `:<sha>` tag into the relevant overlay; Argo CD auto-syncs whatever git says. The only human gate is an **approval** on the prod-promotion workflow — Argo itself just follows git.
@@ -33,7 +33,9 @@ The image and repo are **private**, so a GitHub PAT drives the cluster's image-p
 | `.github/workflows/build.yaml` | test → build → deploy-dev → promote-staging → open prod PR |
 | `k8s/base/` | shared Deployment, Service, Ingress |
 | `k8s/overlays/{dev,staging,prod}/` | per-env namespace, replicas, host, image tag |
+| `k8s/cloudflared/` | Cloudflare Tunnel Deployment for public prod access |
 | `argocd/applicationset.yaml` | one ApplicationSet → generates the 3 env Apps |
+| `argocd/application-cloudflared.yaml` | Argo app for the Cloudflare Tunnel |
 | `argocd/ingress.yaml` | ingress for the Argo CD UI |
 | `kind-config.yaml` | kind cluster with ingress port mappings (8080/8443) |
 | `scripts/setup.sh` | bootstrap cluster + ingress + Argo CD + secrets + ApplicationSet |
@@ -71,12 +73,12 @@ Creates a clean kind cluster (Podman), installs ingress-nginx and Argo CD, wires
 |-----|-----|
 | dev | http://dev.localhost:8080/ |
 | staging | http://staging.localhost:8080/ |
-| prod | http://moetikeenjasaan.nl:8080/ |
+| prod | http://moetikmnjasaan.nl:8080/ |
 
 `*.localhost` resolves to loopback in Chrome/Firefox automatically. For prod's real hostname, add a hosts entry:
 
 ```bash
-echo "127.0.0.1 moetikeenjasaan.nl www.moetikeenjasaan.nl" | sudo tee -a /etc/hosts
+echo "127.0.0.1 moetikmnjasaan.nl www.moetikmnjasaan.nl" | sudo tee -a /etc/hosts
 ```
 
 ### Argo CD UI
@@ -99,13 +101,33 @@ There's always a single rolling `promote-prod` PR that reflects the latest stagi
 
 For this to work, enable Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests**.
 
-## Going public (later)
+## Going public — Cloudflare Tunnel (free)
 
-The prod overlay is already wired for `moetikeenjasaan.nl`. A real public launch additionally needs:
+The domain `moetikmnjasaan.nl` is served publicly via a **Cloudflare Tunnel**: a
+`cloudflared` Deployment (`k8s/cloudflared/`) dials out to Cloudflare's edge and
+forwards traffic to ingress-nginx. No public IP, no port-forwarding, and TLS is
+handled at Cloudflare's edge — so no cert-manager needed.
 
-- a cluster reachable from the internet (managed k8s, or kind behind a tunnel) with a real LoadBalancer / public IP;
-- **DNS**: `A`/`AAAA` records for `moetikeenjasaan.nl` and `www` pointing at that IP;
-- **TLS**: install `cert-manager` + a Let's Encrypt `ClusterIssuer`, then add a `tls:` block and the `cert-manager.io/cluster-issuer` annotation to the prod ingress.
+One-time, in the Cloudflare dashboard:
+
+1. Add `moetikmnjasaan.nl` to Cloudflare (Free plan) and set your registrar's
+   nameservers to the two Cloudflare gives you.
+2. Zero Trust → Networks → **Tunnels** → Create a tunnel (type `cloudflared`).
+   Copy the **tunnel token**.
+3. In that tunnel, add **Public hostnames**:
+   - `moetikmnjasaan.nl` → `http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80`
+   - `www.moetikmnjasaan.nl` → same service
+   cloudflared sends the Host header, so ingress-nginx routes to the prod app.
+
+Then deploy the tunnel (secret stays out of git, like `ghcr-pull`):
+
+```bash
+export CLOUDFLARE_TUNNEL_TOKEN=eyJ...      # from step 2
+./scripts/setup.sh                         # picks up the token and applies cloudflared
+```
+
+Argo CD keeps `cloudflared` running; visiting `https://moetikmnjasaan.nl` now
+reaches your local kind cluster with automatic HTTPS.
 
 ## Tear down
 

@@ -87,6 +87,19 @@ kubectl -n argocd delete application moetikeenjasaan --ignore-not-found
 kubectl delete namespace moetikeenjasaan --ignore-not-found
 kubectl apply -f argocd/applicationset.yaml
 
+# Optional: Cloudflare Tunnel for public prod access. Only wired up if you've
+# set CLOUDFLARE_TUNNEL_TOKEN (from the Cloudflare Zero Trust dashboard).
+if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+  echo "==> [+] Wiring Cloudflare Tunnel (cloudflared)"
+  kubectl create namespace cloudflared --dry-run=client -o yaml | kubectl apply -f -
+  kubectl -n cloudflared create secret generic cloudflared-token \
+    --from-literal=token="$CLOUDFLARE_TUNNEL_TOKEN" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl apply -f argocd/application-cloudflared.yaml
+else
+  echo "==> [+] Skipping Cloudflare Tunnel (set CLOUDFLARE_TUNNEL_TOKEN to enable)"
+fi
+
 cat <<EOF
 
 ============================================================
@@ -95,8 +108,8 @@ cat <<EOF
  Apps (after Argo syncs):
    dev      http://dev.localhost:8080/
    staging  http://staging.localhost:8080/
-   prod     http://moetikeenjasaan.nl:8080/   (needs an /etc/hosts entry:)
-              echo "127.0.0.1 moetikeenjasaan.nl www.moetikeenjasaan.nl" | sudo tee -a /etc/hosts
+   prod     http://moetikmnjasaan.nl:8080/   (needs an /etc/hosts entry:)
+              echo "127.0.0.1 moetikmnjasaan.nl www.moetikmnjasaan.nl" | sudo tee -a /etc/hosts
 
  Watch all envs:
    kubectl get pods -A -l app=moetikeenjasaan -w
