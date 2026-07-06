@@ -81,23 +81,24 @@ stringData:
   password: ${GITHUB_PAT}
 EOF
 
-echo "==> [6/6] Applying Argo CD ApplicationSet (dev, staging, prod)"
+echo "==> [6/6] Applying Argo CD root app (app-of-apps)"
 # Migrate off the old single-namespace app if it's still around.
 kubectl -n argocd delete application moetikeenjasaan --ignore-not-found
 kubectl delete namespace moetikeenjasaan --ignore-not-found
-kubectl apply -f argocd/applicationset.yaml
+# The root app watches argocd/ and manages the ApplicationSet, the cloudflared
+# app, and the Argo CD ingress. We only bootstrap this one Application.
+kubectl apply -f argocd/root.yaml
 
-# Optional: Cloudflare Tunnel for public prod access. Only wired up if you've
-# set CLOUDFLARE_TUNNEL_TOKEN (from the Cloudflare Zero Trust dashboard).
+# Cloudflare Tunnel secret (kept out of git). The cloudflared *Application* is
+# managed by the root app; it just needs this secret to become healthy.
 if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
-  echo "==> [+] Wiring Cloudflare Tunnel (cloudflared)"
+  echo "==> [+] Creating Cloudflare Tunnel secret"
   kubectl create namespace cloudflared --dry-run=client -o yaml | kubectl apply -f -
   kubectl -n cloudflared create secret generic cloudflared-token \
     --from-literal=token="$CLOUDFLARE_TUNNEL_TOKEN" \
     --dry-run=client -o yaml | kubectl apply -f -
-  kubectl apply -f argocd/application-cloudflared.yaml
 else
-  echo "==> [+] Skipping Cloudflare Tunnel (set CLOUDFLARE_TUNNEL_TOKEN to enable)"
+  echo "==> [+] No CLOUDFLARE_TUNNEL_TOKEN set — cloudflared will wait for the secret."
 fi
 
 cat <<EOF

@@ -34,6 +34,7 @@ The image and repo are **private**, so a GitHub PAT drives the cluster's image-p
 | `k8s/base/` | shared Deployment, Service, Ingress |
 | `k8s/overlays/{dev,staging,prod}/` | per-env namespace, replicas, host, image tag |
 | `k8s/cloudflared/` | Cloudflare Tunnel Deployment for public prod access |
+| `argocd/root.yaml` | app-of-apps: watches `argocd/`, manages everything below |
 | `argocd/applicationset.yaml` | one ApplicationSet → generates the 3 env Apps |
 | `argocd/application-cloudflared.yaml` | Argo app for the Cloudflare Tunnel |
 | `argocd/ingress.yaml` | ingress for the Argo CD UI |
