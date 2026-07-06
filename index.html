@@ -152,6 +152,9 @@ function baseLevel(feels) {
   return 4;
 }
 
+// What you need at each level, for the day-ahead nuance sentence.
+const NEED = ["geen jas", "een vestje", "een jas", "een winterjas", "een winterjas"];
+
 // Core decision. Exposed for testing.
 // `outlook` is optional: { maxFeels, maxHour, minFeels, minHour } for the rest
 // of today, used to add a "but it changes later" nuance without changing the
@@ -201,14 +204,30 @@ function phrase(d) {
   }
   if (d.umbrella) line += " Neem een paraplu ☔.";
 
-  // Day-ahead nuance: only if the rest of today clearly swings past the current
-  // verdict (>= 3° and into a different coat level).
+  // Day-ahead nuance: fire whenever the coat *category* changes later today.
   const o = d.outlook;
   if (o) {
-    if (baseLevel(o.maxFeels) < d.level && (o.maxFeels - d.feels) >= 3) {
-      line += ` Maar rond ${o.maxHour} wordt het ~${Math.round(o.maxFeels)}° — neem iets wat je makkelijk uit kunt doen.`;
-    } else if (baseLevel(o.minFeels) > d.level && (d.feels - o.minFeels) >= 3) {
-      line += ` Maar later koelt het af naar ~${Math.round(o.minFeels)}° (rond ${o.minHour}) — neem toch een extra laag mee.`;
+    const nowCat = baseLevel(d.feels);
+    const warmerCat = baseLevel(o.maxFeels);   // warmest hour -> fewest layers
+    const colderCat = baseLevel(o.minFeels);   // coldest hour -> most layers
+    const warmer = warmerCat < nowCat ? { lvl: warmerCat, h: o.maxInHours, at: o.maxHour } : null;
+    const colder = colderCat > nowCat ? { lvl: colderCat, h: o.minInHours, at: o.minHour } : null;
+
+    // If both a warmer and colder swing happen, mention whichever comes first.
+    let pick = null, dir = null;
+    if (warmer && colder) { pick = warmer.h <= colder.h ? warmer : colder; dir = pick === warmer ? "warmer" : "colder"; }
+    else if (warmer) { pick = warmer; dir = "warmer"; }
+    else if (colder) { pick = colder; dir = "colder"; }
+
+    if (pick) {
+      const hu = pick.h === 1 ? "1 uur" : `${pick.h} uur`;
+      if (dir === "warmer") {
+        line += pick.lvl === 0
+          ? ` Over ${hu} (rond ${pick.at}) heb je geen jas meer nodig.`
+          : ` Over ${hu} (rond ${pick.at}) is ${NEED[pick.lvl]} al genoeg.`;
+      } else {
+        line += ` Over ${hu} (rond ${pick.at}) heb je ${NEED[pick.lvl]} nodig.`;
+      }
     }
   }
   return line;
@@ -255,21 +274,26 @@ async function fetchWeather(lat, lon) {
   const probs = H.precipitation_probability || [];
   const rainSoonProb = probs.length ? Math.max(...probs.slice(0, 4).map(x => x || 0)) : 0;
 
-  // Outlook: warmest/coldest feels-like over the *remaining hours of today*.
+  // Outlook: warmest/coldest feels-like over the *remaining hours of today*,
+  // with how many hours from now each occurs.
   const times = H.time || [];
   const feelsArr = H.apparent_temperature || [];
+  const hoursFromNow = (iso) => Math.max(1, Math.round((Date.parse(iso) - Date.parse(c.time)) / 3600000));
   let outlook = null;
   if (times.length && feelsArr.length) {
     const today = (c.time || times[0]).slice(0, 10);
-    let maxFeels = -Infinity, minFeels = Infinity, maxHour = null, minHour = null;
+    let maxFeels = -Infinity, minFeels = Infinity, maxIso = null, minIso = null;
     for (let i = 1; i < times.length; i++) {
       if (times[i].slice(0, 10) !== today) break;   // stop at midnight
       const f = feelsArr[i];
       if (f == null) continue;
-      if (f > maxFeels) { maxFeels = f; maxHour = times[i].slice(11, 16); }
-      if (f < minFeels) { minFeels = f; minHour = times[i].slice(11, 16); }
+      if (f > maxFeels) { maxFeels = f; maxIso = times[i]; }
+      if (f < minFeels) { minFeels = f; minIso = times[i]; }
     }
-    if (maxHour) outlook = { maxFeels, maxHour, minFeels, minHour };
+    if (maxIso) outlook = {
+      maxFeels, maxHour: maxIso.slice(11, 16), maxInHours: hoursFromNow(maxIso),
+      minFeels, minHour: minIso.slice(11, 16), minInHours: hoursFromNow(minIso),
+    };
   }
 
   return {

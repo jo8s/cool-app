@@ -50,32 +50,39 @@ for (const c of cases) {
 // Invariant: level is always within range.
 check("levels within 0..4", cases.every((c) => decide(c.in).level >= 0 && decide(c.in).level <= 4));
 
-console.log("\nDay-ahead nuance:");
-// Cold now (jas), much warmer this afternoon -> "neem iets uit te doen"
+console.log("\nDay-ahead nuance (category change):");
+// Cold morning (jas), warm afternoon crossing to geen-jas -> "geen jas meer nodig"
 {
   const d = decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0,
-    outlook: { maxFeels: 22, maxHour: "15:00", minFeels: 9, minHour: "20:00" } });
+    outlook: { maxFeels: 22, maxHour: "15:00", maxInHours: 6, minFeels: 9, minHour: "07:00", minInHours: 1 } });
   const p = phrase(d);
-  check("warmer later -> mentions 15:00", p.includes("15:00"));
-  check("warmer later -> mentions ~22°", p.includes("22°"));
-  check("warmer later -> suggests taking a layer off", p.includes("uit kunt doen"));
+  check("warmer -> mentions 'Over 6 uur'", p.includes("Over 6 uur"));
+  check("warmer -> mentions rond 15:00", p.includes("15:00"));
+  check("warmer -> 'geen jas meer nodig'", p.includes("geen jas meer nodig"));
 }
-// Warm now (geen jas), cold evening -> "neem toch een extra laag mee"
+// Cool now (jas, 8°), later only vestje-weather (15°) -> "een vestje al genoeg"
+{
+  const d = decide({ feels: 8, temp: 9, wind: 5, weatherCode: 0, rainSoonProb: 0,
+    outlook: { maxFeels: 15, maxHour: "16:00", maxInHours: 8, minFeels: 8, minHour: "08:00", minInHours: 1 } });
+  const p = phrase(d);
+  check("warmer -> 'een vestje al genoeg'", p.includes("een vestje al genoeg"));
+}
+// Warm now (geen jas, 20°), cold evening (jas, 10°) -> "een jas nodig"
 {
   const d = decide({ feels: 20, temp: 21, wind: 5, weatherCode: 0, rainSoonProb: 0,
-    outlook: { maxFeels: 21, maxHour: "14:00", minFeels: 10, minHour: "21:00" } });
+    outlook: { maxFeels: 21, maxHour: "14:00", maxInHours: 2, minFeels: 10, minHour: "21:00", minInHours: 11 } });
   const p = phrase(d);
-  check("colder later -> mentions evening drop", p.includes("21:00") && p.includes("extra laag"));
+  check("colder -> 'Over 11 uur' + 'een jas nodig'", p.includes("Over 11 uur") && p.includes("een jas nodig"));
 }
-// Stable day (small swing) -> no nuance appended
+// Same category all day -> no nuance
 {
   const d = decide({ feels: 15, temp: 16, wind: 5, weatherCode: 0, rainSoonProb: 0,
-    outlook: { maxFeels: 16, maxHour: "15:00", minFeels: 14, minHour: "20:00" } });
+    outlook: { maxFeels: 16, maxHour: "15:00", maxInHours: 5, minFeels: 14, minHour: "20:00", minInHours: 9 } });
   const p = phrase(d);
-  check("stable day -> no nuance", !p.includes("Maar"));
+  check("stable category -> no nuance", !p.includes("Over "));
 }
-// Backward-compat: no outlook -> unchanged phrase, no crash
-check("no outlook -> no nuance", !phrase(decide(cases[0].in)).includes("Maar"));
+// Backward-compat: no outlook -> no nuance, no crash
+check("no outlook -> no nuance", !phrase(decide(cases[0].in)).includes("Over "));
 
 console.log(fails ? `\n❌ FAILED (${fails} check${fails > 1 ? "s" : ""})` : "\n✅ All tests passed.");
 process.exit(fails ? 1 : 0);
