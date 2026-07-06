@@ -10,7 +10,7 @@ resources:
 images:
 - name: app-image
   newName: ghcr.io/jo8s/cool-app
-  newTag: 63ce5254d5a32517b2f14f9531d7ca8054d007a7
+  newTag: 12d0fdb340bf60883c6502a34219b830bc2ab27c
 
 replicas:
 - count: 1
