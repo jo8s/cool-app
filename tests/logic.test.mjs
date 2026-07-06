@@ -50,5 +50,32 @@ for (const c of cases) {
 // Invariant: level is always within range.
 check("levels within 0..4", cases.every((c) => decide(c.in).level >= 0 && decide(c.in).level <= 4));
 
+console.log("\nDay-ahead nuance:");
+// Cold now (jas), much warmer this afternoon -> "neem iets uit te doen"
+{
+  const d = decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0,
+    outlook: { maxFeels: 22, maxHour: "15:00", minFeels: 9, minHour: "20:00" } });
+  const p = phrase(d);
+  check("warmer later -> mentions 15:00", p.includes("15:00"));
+  check("warmer later -> mentions ~22°", p.includes("22°"));
+  check("warmer later -> suggests taking a layer off", p.includes("uit kunt doen"));
+}
+// Warm now (geen jas), cold evening -> "neem toch een extra laag mee"
+{
+  const d = decide({ feels: 20, temp: 21, wind: 5, weatherCode: 0, rainSoonProb: 0,
+    outlook: { maxFeels: 21, maxHour: "14:00", minFeels: 10, minHour: "21:00" } });
+  const p = phrase(d);
+  check("colder later -> mentions evening drop", p.includes("21:00") && p.includes("extra laag"));
+}
+// Stable day (small swing) -> no nuance appended
+{
+  const d = decide({ feels: 15, temp: 16, wind: 5, weatherCode: 0, rainSoonProb: 0,
+    outlook: { maxFeels: 16, maxHour: "15:00", minFeels: 14, minHour: "20:00" } });
+  const p = phrase(d);
+  check("stable day -> no nuance", !p.includes("Maar"));
+}
+// Backward-compat: no outlook -> unchanged phrase, no crash
+check("no outlook -> no nuance", !phrase(decide(cases[0].in)).includes("Maar"));
+
 console.log(fails ? `\n❌ FAILED (${fails} check${fails > 1 ? "s" : ""})` : "\n✅ All tests passed.");
 process.exit(fails ? 1 : 0);

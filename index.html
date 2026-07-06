@@ -143,17 +143,24 @@ function classifyWeather(code) {
   return { rain: false, snow: false, thunder: false, desc: "helder" };
 }
 
+// Map a feels-like temperature to a coat level (0 geen jas .. 4 blijf binnen).
+function baseLevel(feels) {
+  if (feels >= 19) return 0;
+  if (feels >= 13) return 1;
+  if (feels >= 7) return 2;
+  if (feels >= -3) return 3;
+  return 4;
+}
+
 // Core decision. Exposed for testing.
-function decide({ feels, temp, wind, weatherCode, rainSoonProb }) {
+// `outlook` is optional: { maxFeels, maxHour, minFeels, minHour } for the rest
+// of today, used to add a "but it changes later" nuance without changing the
+// main verdict (which stays based on *now*).
+function decide({ feels, temp, wind, weatherCode, rainSoonProb, outlook }) {
   const w = classifyWeather(weatherCode);
   // Note: Open-Meteo's apparent_temperature already includes wind chill,
   // so we base the level on feels-like and only *mention* wind, not double-count it.
-  let level;
-  if (feels >= 19) level = 0;
-  else if (feels >= 13) level = 1;
-  else if (feels >= 7) level = 2;
-  else if (feels >= -3) level = 3;
-  else level = 4;
+  let level = baseLevel(feels);
 
   const reasons = [];
   const windy = wind >= 25;
@@ -170,7 +177,7 @@ function decide({ feels, temp, wind, weatherCode, rainSoonProb }) {
   else if (rainSoonProb >= 60) { level = Math.max(level, 2); umbrella = true; reasons.push(`straks ${rainSoonProb}% kans op regen`); }
   else if (rainSoonProb >= 35) { umbrella = true; reasons.push(`kans op een bui (${rainSoonProb}%)`); }
 
-  return { level, umbrella, weather: w, reasons, feels, temp, wind };
+  return { level, umbrella, weather: w, reasons, feels, temp, wind, outlook: outlook || null };
 }
 
 // Build a Dutch one-liner from the decision.
@@ -193,6 +200,17 @@ function phrase(d) {
     line += " (" + d.reasons.join(", ") + ")";
   }
   if (d.umbrella) line += " Neem een paraplu ☔.";
+
+  // Day-ahead nuance: only if the rest of today clearly swings past the current
+  // verdict (>= 3° and into a different coat level).
+  const o = d.outlook;
+  if (o) {
+    if (baseLevel(o.maxFeels) < d.level && (o.maxFeels - d.feels) >= 3) {
+      line += ` Maar rond ${o.maxHour} wordt het ~${Math.round(o.maxFeels)}° — neem iets wat je makkelijk uit kunt doen.`;
+    } else if (baseLevel(o.minFeels) > d.level && (d.feels - o.minFeels) >= 3) {
+      line += ` Maar later koelt het af naar ~${Math.round(o.minFeels)}° (rond ${o.minHour}) — neem toch een extra laag mee.`;
+    }
+  }
   return line;
 }
 
@@ -229,18 +247,38 @@ async function geocode(name) {
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m` +
-    `&hourly=precipitation_probability&forecast_hours=4&timezone=auto`;
+    `&hourly=apparent_temperature,precipitation_probability&forecast_hours=16&timezone=auto`;
   const r = await fetch(url);
   const j = await r.json();
   const c = j.current;
-  const probs = (j.hourly && j.hourly.precipitation_probability) || [];
+  const H = j.hourly || {};
+  const probs = H.precipitation_probability || [];
   const rainSoonProb = probs.length ? Math.max(...probs.slice(0, 4).map(x => x || 0)) : 0;
+
+  // Outlook: warmest/coldest feels-like over the *remaining hours of today*.
+  const times = H.time || [];
+  const feelsArr = H.apparent_temperature || [];
+  let outlook = null;
+  if (times.length && feelsArr.length) {
+    const today = (c.time || times[0]).slice(0, 10);
+    let maxFeels = -Infinity, minFeels = Infinity, maxHour = null, minHour = null;
+    for (let i = 1; i < times.length; i++) {
+      if (times[i].slice(0, 10) !== today) break;   // stop at midnight
+      const f = feelsArr[i];
+      if (f == null) continue;
+      if (f > maxFeels) { maxFeels = f; maxHour = times[i].slice(11, 16); }
+      if (f < minFeels) { minFeels = f; minHour = times[i].slice(11, 16); }
+    }
+    if (maxHour) outlook = { maxFeels, maxHour, minFeels, minHour };
+  }
+
   return {
     temp: c.temperature_2m,
     feels: c.apparent_temperature,
     wind: c.wind_speed_10m,
     weatherCode: c.weather_code,
     rainSoonProb,
+    outlook,
   };
 }
 
