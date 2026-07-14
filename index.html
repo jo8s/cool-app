@@ -55,6 +55,8 @@
     font-weight: 500;
   }
   .place {
+    position: relative;
+    z-index: 4;               /* keep the suggestions dropdown above the geo button */
     margin-top: 34px;
     display: flex;
     gap: 8px;
@@ -64,6 +66,32 @@
     padding: 6px 6px 6px 18px;
     backdrop-filter: blur(6px);
   }
+  .suggest {
+    list-style: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 4px;
+    background: #fff;
+    color: #222;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+    text-align: left;
+    display: none;
+    z-index: 5;
+  }
+  .suggest.on { display: block; }
+  .suggest li {
+    padding: 8px 12px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .suggest li:hover, .suggest li[aria-selected="true"] { background: #eef3fb; }
+  .suggest li small { display: block; font-weight: 400; opacity: 0.6; font-size: 12px; }
   .place input {
     border: none;
     background: transparent;
@@ -106,7 +134,7 @@
   .loading .verdict { opacity: 0.5; }
 
   /* keep all content above the animated background */
-  .emoji, .verdict, .reason, .details, .extras, .hours, .place, .geo, .footer { position: relative; z-index: 2; }
+  .emoji, .verdict, .reason, .details, .extras, .hours, .geo, .footer { position: relative; z-index: 2; }
 
   /* hourly strip (now -> midnight); tap/hover a cell for the actual temp */
   .hours {
@@ -230,8 +258,10 @@
   <div class="hours" id="hours"></div>
 
   <div class="place">
-    <input id="city" type="text" placeholder="Plaats…" autocomplete="off" aria-label="Plaats">
+    <input id="city" type="text" placeholder="Plaats…" autocomplete="off" aria-label="Plaats"
+           role="combobox" aria-expanded="false" aria-controls="suggest" aria-autocomplete="list">
     <button id="go">Check</button>
+    <ul class="suggest" id="suggest" role="listbox" aria-label="Plaatssuggesties"></ul>
   </div>
   <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
 
@@ -276,6 +306,16 @@ function baseLevel(feels) {
 // What you need at each level, for the day-ahead nuance sentence.
 const NEED = ["geen jas", "een vestje", "een jas", "een winterjas", "een winterjas"];
 
+// A few verdict variants per level, picked at random so it feels fresh.
+const VERDICTS = [
+  ["Lekker weer joh, niks aan de hand.", "Geen jas nodig, geniet ervan.", "Jas? Laat lekker thuis.", "Vandaag jasvrij."],
+  ["Een vestje is genoeg.", "Vestjesweer, meer niet.", "Een laagje volstaat.", "Vestje mee en klaar."],
+  ["Gewoon een jas.", "Ja, een jas.", "Jas aan, klaar.", "Trek een jas aan."],
+  ["Winterjas aan!", "Dikke jas erbij.", "Winterjas, geen twijfel.", "De warme jas mag uit de kast."],
+  ["Serieus, blijf binnen.", "Blijf lekker binnen.", "Buiten? Liever niet.", "Kachel aan, deur dicht."],
+];
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
 // Accessory icons based on conditions. Exposed for testing.
 function accessories(feels, weather, umbrella, uv) {
   uv = uv || 0;
@@ -295,7 +335,7 @@ function accessories(feels, weather, umbrella, uv) {
 // `outlook` is optional: { maxFeels, maxHour, minFeels, minHour } for the rest
 // of today, used to add a "but it changes later" nuance without changing the
 // main verdict (which stays based on *now*).
-function decide({ feels, temp, wind, weatherCode, rainSoonProb, outlook }) {
+function decide({ feels, temp, wind, weatherCode, rainSoonProb, outlook, vsYesterday }) {
   const w = classifyWeather(weatherCode);
   // Note: Open-Meteo's apparent_temperature already includes wind chill,
   // so we base the level on feels-like and only *mention* wind, not double-count it.
@@ -316,24 +356,27 @@ function decide({ feels, temp, wind, weatherCode, rainSoonProb, outlook }) {
   else if (rainSoonProb >= 60) { level = Math.max(level, 2); umbrella = true; reasons.push(`straks ${rainSoonProb}% kans op regen`); }
   else if (rainSoonProb >= 35) { umbrella = true; reasons.push(`kans op een bui (${rainSoonProb}%)`); }
 
-  return { level, umbrella, weather: w, reasons, feels, temp, wind, outlook: outlook || null };
+  return { level, umbrella, weather: w, reasons, feels, temp, wind, outlook: outlook || null, vsYesterday };
 }
 
 // Build a short Dutch verdict line. Facts (temp, wind, weather) live in the
 // details row and the accessory icons, so this line stays punchy.
 function phrase(d) {
-  let line = [
-    "Lekker weer joh, niks aan de hand.",
-    "Een vestje is genoeg.",
-    "Gewoon een jas.",
-    "Winterjas aan!",
-    "Serieus, blijf binnen.",
-  ][d.level];
+  let line = pick(VERDICTS[d.level]);
 
-  // Fun edge cases
-  if (d.level === 0 && d.feels >= 25) line = "Een jas?? Ben je gek. 🩳";
+  // Fun edge cases & easter eggs (later ones take precedence).
+  if (d.level === 0 && d.feels >= 25) line = pick(["Een jas?? Ben je gek. 🩳", "Jas bij dit weer? Echt niet. 🩳"]);
   if (d.level === 4 && d.feels <= -5) line = "Doe de deur maar dicht. 🥶";
   if (d.feels >= 30) line = "Vergeet die jas — zwemkleding aan en zo snel mogelijk het water in! 🌊";
+  if (d.feels <= -10) line = "IJskoud. Winterjas, muts én een héél goede reden om te gaan. 🥶";
+  if (d.wind >= 60) line = "Storm! Zorg dat je jas niet wegwaait. 🌬️";
+  if (d.weather && d.weather.thunder) line = "Onweer op komst — laat die jas, blijf lekker binnen. ⛈️";
+
+  // Warmer/colder than yesterday (same hour).
+  if (typeof d.vsYesterday === "number") {
+    if (d.vsYesterday <= -3) line += " Voelt kouder dan gisteren.";
+    else if (d.vsYesterday >= 3) line += " Voelt warmer dan gisteren.";
+  }
 
   // Day-ahead nuance: fire whenever the coat *category* changes later today.
   const o = d.outlook;
@@ -554,54 +597,60 @@ async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day,uv_index` +
     `&hourly=temperature_2m,apparent_temperature,weather_code,is_day,precipitation_probability` +
-    `&forecast_hours=24&timezone=auto`;
+    `&past_days=1&forecast_days=1&timezone=auto`;
   const r = await fetch(url);
   const j = await r.json();
   const c = j.current;
   const H = j.hourly || {};
-  const probs = H.precipitation_probability || [];
-  const rainSoonProb = probs.length ? Math.max(...probs.slice(0, 4).map(x => x || 0)) : 0;
-
-  // Outlook: warmest/coldest feels-like over the *remaining hours of today*,
-  // with how many hours from now each occurs.
   const times = H.time || [];
   const feelsArr = H.apparent_temperature || [];
-  const hoursFromNow = (iso) => Math.max(1, Math.round((Date.parse(iso) - Date.parse(c.time)) / 3600000));
-  let outlook = null;
-  if (times.length && feelsArr.length) {
-    const today = (c.time || times[0]).slice(0, 10);
-    let maxFeels = -Infinity, minFeels = Infinity, maxIso = null, minIso = null;
-    for (let i = 1; i < times.length; i++) {
-      if (times[i].slice(0, 10) !== today) break;   // stop at midnight
-      const f = feelsArr[i];
-      if (f == null) continue;
-      if (f > maxFeels) { maxFeels = f; maxIso = times[i]; }
-      if (f < minFeels) { minFeels = f; minIso = times[i]; }
-    }
-    if (maxIso) outlook = {
-      maxFeels, maxHour: maxIso.slice(11, 16), maxInHours: hoursFromNow(maxIso),
-      minFeels, minHour: minIso.slice(11, 16), minInHours: hoursFromNow(minIso),
-    };
-  }
-
-  // Hourly strip for the rest of today (now → 23:00).
   const tempsArr = H.temperature_2m || [];
   const codesArr = H.weather_code || [];
   const dayArr = H.is_day || [];
+  const probs = H.precipitation_probability || [];
+
+  // Find "now": the hourly block containing the current time.
+  const nowKey = (c.time || "").slice(0, 13);            // YYYY-MM-DDTHH
+  let nowIdx = times.findIndex(t => t.slice(0, 13) === nowKey);
+  if (nowIdx < 0) nowIdx = times.findIndex(t => t >= (c.time || ""));
+  if (nowIdx < 0) nowIdx = 0;
+  const today = (c.time || times[nowIdx] || "").slice(0, 10);
+  const hoursFromNow = (iso) => Math.max(1, Math.round((Date.parse(iso) - Date.parse(c.time)) / 3600000));
+
+  // Rain chance over the next ~4 hours.
+  const rainSoonProb = Math.max(0, ...probs.slice(nowIdx, nowIdx + 4).map(x => x || 0));
+
+  // Hourly strip: now → end of today.
   const hours = [];
-  if (times.length) {
-    const today = (c.time || times[0]).slice(0, 10);
-    for (let i = 0; i < times.length; i++) {
-      if (i > 0 && times[i].slice(0, 10) !== today) break;   // stop at midnight
-      hours.push({
-        label: i === 0 ? "nu" : times[i].slice(11, 16),
-        feels: feelsArr[i],
-        actual: tempsArr[i],
-        code: codesArr[i],
-        day: dayArr[i] === undefined ? true : dayArr[i] === 1,
-      });
-    }
+  for (let i = nowIdx; i < times.length; i++) {
+    if (i > nowIdx && times[i].slice(0, 10) !== today) break;
+    hours.push({
+      label: i === nowIdx ? "nu" : times[i].slice(11, 16),
+      feels: feelsArr[i],
+      actual: tempsArr[i],
+      code: codesArr[i],
+      day: dayArr[i] === undefined ? true : dayArr[i] === 1,
+    });
   }
+
+  // Outlook: warmest/coldest feels-like over the rest of today.
+  let outlook = null, maxFeels = -Infinity, minFeels = Infinity, maxIso = null, minIso = null;
+  for (let i = nowIdx + 1; i < times.length; i++) {
+    if (times[i].slice(0, 10) !== today) break;
+    const f = feelsArr[i];
+    if (f == null) continue;
+    if (f > maxFeels) { maxFeels = f; maxIso = times[i]; }
+    if (f < minFeels) { minFeels = f; minIso = times[i]; }
+  }
+  if (maxIso) outlook = {
+    maxFeels, maxHour: maxIso.slice(11, 16), maxInHours: hoursFromNow(maxIso),
+    minFeels, minHour: minIso.slice(11, 16), minInHours: hoursFromNow(minIso),
+  };
+
+  // Feels-like vs. yesterday at the same hour.
+  const yFeels = nowIdx >= 24 ? feelsArr[nowIdx - 24] : null;
+  const vsYesterday = (yFeels != null && c.apparent_temperature != null)
+    ? c.apparent_temperature - yFeels : undefined;
 
   return {
     hours,
@@ -611,6 +660,7 @@ async function fetchWeather(lat, lon) {
     weatherCode: c.weather_code,
     rainSoonProb,
     outlook,
+    vsYesterday,
     isDay: c.is_day === undefined ? true : c.is_day === 1,
     uv: c.uv_index,
   };
@@ -639,7 +689,62 @@ async function runCoords(lat, lon, label) {
 }
 
 $("go").addEventListener("click", () => { const v = $("city").value.trim(); if (v) run(v); });
-$("city").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("city").addEventListener("keydown", e => {
+  if (e.key === "Enter") { hideSuggest(); $("go").click(); }
+  else if (e.key === "Escape") hideSuggest();
+});
+
+// ----- Search suggestions (autocomplete) -----
+async function runResult(g) {
+  startLoading(`Weer boven ${g.name} ophalen…`);
+  try {
+    const w = await fetchWeather(g.latitude, g.longitude);
+    render([g.name, g.admin1].filter(Boolean).join(", "), decide(w), w);
+  } catch (e) {
+    setError("Kon het weer niet ophalen: " + e.message);
+  }
+}
+function hideSuggest() {
+  const u = $("suggest");
+  u.classList.remove("on");
+  u.innerHTML = "";
+  $("city").setAttribute("aria-expanded", "false");
+}
+async function loadSuggest(q) {
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=nl&format=json`);
+    const j = await r.json();
+    const results = j.results || [];
+    if (!results.length) { hideSuggest(); return; }
+    const u = $("suggest");
+    u.innerHTML = results.map((g, i) => {
+      const sub = [g.admin1, g.country].filter(Boolean).join(", ");
+      return `<li role="option" data-i="${i}">${g.name}${sub ? `<small>${sub}</small>` : ""}</li>`;
+    }).join("");
+    u._results = results;
+    u.classList.add("on");
+    $("city").setAttribute("aria-expanded", "true");
+  } catch {
+    hideSuggest();
+  }
+}
+let suggestTimer;
+$("city").addEventListener("input", () => {
+  clearTimeout(suggestTimer);
+  const q = $("city").value.trim();
+  if (q.length < 2) { hideSuggest(); return; }
+  suggestTimer = setTimeout(() => loadSuggest(q), 250);
+});
+$("suggest").addEventListener("click", e => {
+  const li = e.target.closest("li");
+  if (!li) return;
+  const g = $("suggest")._results[+li.dataset.i];
+  $("city").value = g.name;
+  localStorage.setItem("jas_city", g.name);
+  hideSuggest();
+  runResult(g);
+});
+document.addEventListener("click", e => { if (!e.target.closest(".place")) hideSuggest(); });
 $("geo").addEventListener("click", () => {
   if (!navigator.geolocation) { setError("Je browser deelt geen locatie."); return; }
   startLoading("Locatie ophalen…");

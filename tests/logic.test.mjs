@@ -21,6 +21,8 @@ check("requests is_day + uv for night mode & accessories", html.includes("is_day
 check("has weather-fx layer", html.includes('id="fx"'));
 check("has accessories row", html.includes('id="extras"'));
 check("has hourly strip", html.includes('id="hours"') && /renderHours/.test(html));
+check("has search suggestions", html.includes('id="suggest"') && /loadSuggest/.test(html) && html.includes("count=5"));
+check("compares with yesterday", html.includes("past_days=1") && html.includes("vsYesterday"));
 check("has random footer quip", html.includes('id="quip"') && html.includes("geef de wolken de schuld"));
 check("cold quip only under 10°", html.includes('feels < 10') && html.includes("dat bouwt karakter"));
 check("hourly strip shows actual temp on tap/hover", html.includes("werkelijk ${Math.round(h.actual)}"));
@@ -121,6 +123,21 @@ console.log("\nHeat verdict:");
   const p = phrase(d);
   check("30°+ -> swim advice", p.includes("zwemkleding") && p.includes("water in"));
   check("29° -> no swim advice", !phrase(decide({ feels: 29, temp: 30, wind: 4, weatherCode: 0, rainSoonProb: 0 })).includes("zwemkleding"));
+}
+
+console.log("\nVariety, easter eggs & yesterday:");
+{
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) seen.add(phrase(decide({ feels: 21, temp: 22, wind: 5, weatherCode: 0, rainSoonProb: 0 })));
+  check("verdict has multiple variants", seen.size >= 2);
+
+  check("thunder -> onweer easter egg", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 96, rainSoonProb: 0 })).includes("Onweer"));
+  check("gale -> storm easter egg", phrase(decide({ feels: 8, temp: 9, wind: 70, weatherCode: 3, rainSoonProb: 0 })).includes("Storm"));
+  check("-10° -> ijskoud easter egg", phrase(decide({ feels: -12, temp: -8, wind: 5, weatherCode: 0, rainSoonProb: 0 })).includes("IJskoud"));
+
+  check("colder than yesterday", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: -5 })).includes("kouder dan gisteren"));
+  check("warmer than yesterday", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: 5 })).includes("warmer dan gisteren"));
+  check("similar to yesterday -> no clause", !phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: 1 })).includes("gisteren"));
 }
 
 console.log(fails ? `\n❌ FAILED (${fails} check${fails > 1 ? "s" : ""})` : "\n✅ All tests passed.");
