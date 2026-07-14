@@ -1,12 +1,12 @@
-# moetikmnjasaan 🧥 
+# moetikmnjasaan 🧥
 
-A gloriously useless single-serving web app that answers the only question that matters: **moet ik m'n jas aan?** It reads live weather (feels-like temp, rain forecast, and how the day changes) straight from [Open-Meteo](https://open-meteo.com) in the browser, and shouts a 5-level verdict — `NEE → VESTJE → JA → JA! → BLIJF BINNEN` — plus a day-ahead note when the coat category changes later ("Over 6 uur heb je geen jas meer nodig.").
+A gloriously useless single-serving web app that answers the only question that matters: **moet ik m'n jas aan?** It reads live weather (feels-like temperature, rain forecast, and how the day changes) straight from [Open-Meteo](https://open-meteo.com) in the browser and shouts a 5-level verdict — `NEE → VESTJE → JA → JA! → BLIJF BINNEN` — plus a note when the coat category changes later in the day ("Over 6 uur heb je geen jas meer nodig.").
 
 Live at **[moetikmnjasaan.nl](https://moetikmnjasaan.nl)**.
 
 ## How it works
 
-It's a single static `index.html` — no server, no backend. The JavaScript calls Open-Meteo directly from the visitor's browser.
+It's a single static `index.html` — no server, no backend. The JavaScript calls Open-Meteo directly from the visitor's browser, so hosting is just static files.
 
 ```
 push to main       → Cloudflare Workers → moetikmnjasaan.nl   (production)
@@ -33,19 +33,8 @@ node tests/logic.test.mjs
 
 ## Deploy
 
-Hosting is a **Cloudflare Worker with static assets** (a static-assets-only Worker — no server code), connected to this GitHub repo via Workers Builds. Build configuration:
+Hosting is a static-assets-only Cloudflare Worker, connected to this repo via Workers Builds: build command `mkdir -p dist && cp index.html dist/`, deploy command `npx wrangler deploy`. Every push to `main` goes live at `moetikmnjasaan.nl`.
 
-- Build command: `mkdir -p dist && cp index.html dist/`
-- Deploy command: `npx wrangler deploy`
+## Contributing
 
-`wrangler.jsonc` tells Wrangler to serve `./dist`. Every push to `main` deploys to `moetikmnjasaan.nl`. It's free, global, always-on, and serves TLS at Cloudflare's edge — no server or cluster needed.
-
-> Set `name` in `wrangler.jsonc` to match your Worker's name.
-
-## Review before merging
-
-Workers Builds produces a **preview URL** for non-production branches and pull requests. So the flow is:
-
-1. Create a branch, make your change, push it (or open a PR).
-2. GitHub Actions runs the tests; Cloudflare publishes a preview URL for the branch build.
-3. Open the preview URL, check it live, and when happy, **merge to main** — which deploys to production.
+`main` is production. Work on a branch and open a pull request — see [CONTRIBUTING.md](CONTRIBUTING.md).

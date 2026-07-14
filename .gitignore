@@ -1,3 +1,6 @@
+# build output (created by the deploy build command)
+dist/
+
 # wrangler files
 .wrangler
 .dev.vars*
