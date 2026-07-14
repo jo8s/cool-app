@@ -323,7 +323,8 @@ function accessories(feels, weather, umbrella, uv) {
   if (feels >= 30) a.push({ icon: "🌊", label: "zwemkleding — neem een duik" });
   if (feels >= 24) a.push({ icon: "🩳", label: "korte broek" });
   if (uv >= 6) a.push({ icon: "🧴", label: "zonnebrand (hoge UV)" });
-  if (uv >= 3) a.push({ icon: "🕶️", label: "zonnebril" });
+  if (feels >= 30) a.push({ icon: "👙", label: "bikini" });
+  else if (uv >= 3) a.push({ icon: "🕶️", label: "zonnebril" });
   if (umbrella) a.push({ icon: "☔", label: "paraplu" });
   if (weather.snow) a.push({ icon: "⛄", label: "sneeuwpret" });
   if (feels <= 4) a.push({ icon: "🧣", label: "sjaal / muts" });
@@ -437,6 +438,13 @@ function startLoading(msg) {
 function stopLoading() {
   $("loader").classList.remove("on");
   $("emoji").style.display = "";
+}
+
+// Remember the chosen place and reflect it in the URL, so the page is
+// bookmarkable/shareable: moetikmnjasaan.nl/?plaats=Groningen
+function rememberCity(name) {
+  localStorage.setItem("jas_city", name);
+  try { history.replaceState(null, "", "?plaats=" + encodeURIComponent(name)); } catch (e) {}
 }
 
 function render(place, d, w) {
@@ -672,7 +680,7 @@ async function run(name) {
     const g = await geocode(name);
     const w = await fetchWeather(g.lat, g.lon);
     render(g.label, decide(w), w);
-    localStorage.setItem("jas_city", name);
+    rememberCity(name);
   } catch (e) {
     setError("Kon het weer niet ophalen: " + e.message);
   }
@@ -740,7 +748,7 @@ $("suggest").addEventListener("click", e => {
   if (!li) return;
   const g = $("suggest")._results[+li.dataset.i];
   $("city").value = g.name;
-  localStorage.setItem("jas_city", g.name);
+  rememberCity(g.name);
   hideSuggest();
   runResult(g);
 });
@@ -753,7 +761,7 @@ $("geo").addEventListener("click", () => {
       const name = await reverseGeocode(p.coords.latitude, p.coords.longitude);
       if (name) {
         $("city").value = name;                 // show which place is used
-        localStorage.setItem("jas_city", name);
+        rememberCity(name);
       }
       runCoords(p.coords.latitude, p.coords.longitude, name || "jouw locatie");
     },
@@ -767,8 +775,9 @@ $("geo").addEventListener("click", () => {
   );
 });
 
-// Start: last used city, or Amsterdam
-const start = localStorage.getItem("jas_city") || "Amsterdam";
+// Start: ?plaats= from the URL (shareable link), else last used city, else Amsterdam
+const start = new URLSearchParams(location.search).get("plaats")
+  || localStorage.getItem("jas_city") || "Amsterdam";
 $("city").value = start;
 setQuip();          // populate the footer immediately, before weather loads
 run(start);
