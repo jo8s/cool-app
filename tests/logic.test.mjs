@@ -24,6 +24,7 @@ check("has hourly strip", html.includes('id="hours"') && /renderHours/.test(html
 check("has search suggestions", html.includes('id="suggest"') && /loadSuggest/.test(html) && html.includes("count=5"));
 check("compares with yesterday", html.includes("past_days=1") && html.includes("vsYesterday"));
 check("shareable ?plaats= link", html.includes('get("plaats")') && html.includes("history.replaceState"));
+check("copy-link button", html.includes('id="share"') && html.includes("clipboard.writeText"));
 check("has random footer quip", html.includes('id="quip"') && html.includes("geef de wolken de schuld"));
 check("cold quip only under 10°", html.includes('feels < 10') && html.includes("dat bouwt karakter"));
 check("hourly strip shows actual temp on tap/hover", html.includes("werkelijk ${Math.round(h.actual)}"));
@@ -42,8 +43,8 @@ const start = html.indexOf("const LEVELS");
 const end = html.indexOf("// ---------- UI wiring");
 check("logic block present", start !== -1 && end !== -1 && end > start);
 const code = html.slice(start, end);
-const { decide, phrase, LEVELS, accessories } = new Function(
-  code + "\nreturn { decide, phrase, LEVELS, accessories };"
+const { decide, phrase, LEVELS, accessories, holidayGreeting } = new Function(
+  code + "\nreturn { decide, phrase, LEVELS, accessories, holidayGreeting };"
 )();
 
 console.log("\nCoat logic (level: 0 geen jas … 4 blijf binnen):");
@@ -143,6 +144,14 @@ console.log("\nVariety, easter eggs & yesterday:");
   check("colder than yesterday", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: -5 })).includes("kouder dan gisteren"));
   check("warmer than yesterday", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: 5 })).includes("warmer dan gisteren"));
   check("similar to yesterday -> no clause", !phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: 1 })).includes("gisteren"));
+}
+
+console.log("\nHoliday greetings:");
+{
+  check("Christmas", holidayGreeting(new Date(2026, 11, 25)) === "Fijne kerst! 🎄");
+  check("Koningsdag", (holidayGreeting(new Date(2026, 3, 27)) || "").includes("Koningsdag"));
+  check("New Year", (holidayGreeting(new Date(2026, 0, 1)) || "").includes("nieuwjaar"));
+  check("ordinary day -> none", holidayGreeting(new Date(2026, 5, 15)) === null);
 }
 
 console.log(fails ? `\n❌ FAILED (${fails} check${fails > 1 ? "s" : ""})` : "\n✅ All tests passed.");

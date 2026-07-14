@@ -264,6 +264,7 @@
     <ul class="suggest" id="suggest" role="listbox" aria-label="Plaatssuggesties"></ul>
   </div>
   <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
+  <button class="geo" id="share">🔗 Kopieer deelbare link</button>
 
   <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · <span id="quip"></span></div>
 
@@ -330,6 +331,21 @@ function accessories(feels, weather, umbrella, uv) {
   if (feels <= 4) a.push({ icon: "🧣", label: "sjaal / muts" });
   if (feels <= -3) a.push({ icon: "🧤", label: "handschoenen" });
   return a;
+}
+
+// Small holiday greeting for the footer (Dutch calendar). Exposed for testing.
+function holidayGreeting(d = new Date()) {
+  const key = (d.getMonth() + 1) + "-" + d.getDate();
+  return {
+    "1-1": "Gelukkig nieuwjaar! 🎆",
+    "4-27": "Fijne Koningsdag! 🧡",
+    "10-31": "Happy Halloween 🎃",
+    "12-5": "Fijne pakjesavond! 🎁",
+    "12-24": "Fijne kerst! 🎄",
+    "12-25": "Fijne kerst! 🎄",
+    "12-26": "Fijne kerst! 🎄",
+    "12-31": "Fijne jaarwisseling! 🎆",
+  }[key] || null;
 }
 
 // Core decision. Exposed for testing.
@@ -420,6 +436,8 @@ const QUIPS = [
   "er bestaat geen slecht weer, alleen verkeerde kleding",
 ];
 function setQuip(feels) {
+  const holiday = holidayGreeting();
+  if (holiday) { $("quip").textContent = holiday; return; }
   const pool = QUIPS.slice();
   if (typeof feels === "number" && feels < 10) pool.push("koud? dat bouwt karakter");
   $("quip").textContent = pool[Math.floor(Math.random() * pool.length)];
@@ -753,6 +771,19 @@ $("suggest").addEventListener("click", e => {
   runResult(g);
 });
 document.addEventListener("click", e => { if (!e.target.closest(".place")) hideSuggest(); });
+
+// Copy the current shareable link to the clipboard.
+$("share").addEventListener("click", async () => {
+  const b = $("share");
+  try {
+    await navigator.clipboard.writeText(location.href);
+    const original = b.textContent;
+    b.textContent = "✓ Link gekopieerd!";
+    setTimeout(() => { b.textContent = original; }, 1600);
+  } catch {
+    prompt("Kopieer de link:", location.href);
+  }
+});
 $("geo").addEventListener("click", () => {
   if (!navigator.geolocation) { setError("Je browser deelt geen locatie."); return; }
   startLoading("Locatie ophalen…");
