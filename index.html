@@ -187,22 +187,50 @@
   body.night::before { content: ""; position: fixed; inset: 0; z-index: 0;
     background: rgba(8, 12, 30, 0.5); pointer-events: none; }
 
+  /* sun + cloud loading animation */
+  .loader { display: none; position: relative; width: 120px; height: 92px; margin: 0 auto 8px; }
+  .loader.on { display: block; }
+  .l-sun { position: absolute; top: 8px; left: 34px; width: 50px; height: 50px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, #ffe883, #ffb43d);
+    box-shadow: 0 0 22px rgba(255,206,90,0.6); }
+  .l-sun::before { content: ""; position: absolute; inset: -14px; border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0 14deg, rgba(255,222,120,0.55) 14deg 18deg, transparent 18deg 30deg);
+    animation: l-spin 7s linear infinite; }
+  .l-cloud { position: absolute; bottom: 6px; left: 22px; width: 76px; height: 24px;
+    background: #fff; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+    animation: l-bob 2.6s ease-in-out infinite; }
+  .l-cloud::before { content: ""; position: absolute; top: -13px; left: 12px; width: 26px; height: 26px; border-radius: 50%; background: #fff; }
+  .l-cloud::after  { content: ""; position: absolute; top: -19px; left: 32px; width: 34px; height: 34px; border-radius: 50%; background: #fff; }
+  @keyframes l-spin { to { transform: rotate(360deg); } }
+  @keyframes l-bob { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(9px); } }
+
+  /* visible focus for keyboard users */
+  .place:focus-within { box-shadow: 0 0 0 3px rgba(255,255,255,0.85); }
+  .place button:focus-visible, .geo:focus-visible, .hour:focus-visible {
+    outline: 3px solid rgba(255,255,255,0.9);
+    outline-offset: 2px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .drop, .flake, .star, .sun-glow, .sun-rays { animation: none; }
+    .drop, .flake, .star, .sun-glow, .sun-rays, .l-sun::before, .l-cloud { animation: none; }
   }
 </style>
 </head>
 <body>
   <div id="fx"></div>
-  <div class="emoji" id="emoji">🤔</div>
-  <div class="verdict" id="verdict">Even kijken…</div>
-  <div class="reason" id="reason">De lucht wordt geraadpleegd.</div>
+  <div class="loader" id="loader" aria-hidden="true">
+    <div class="l-sun"></div>
+    <div class="l-cloud"></div>
+  </div>
+  <div class="emoji" id="emoji" aria-hidden="true">🤔</div>
+  <div class="verdict" id="verdict" aria-live="polite">Even kijken…</div>
+  <div class="reason" id="reason" aria-live="polite">De lucht wordt geraadpleegd.</div>
   <div class="details" id="details"></div>
   <div class="extras" id="extras"></div>
   <div class="hours" id="hours"></div>
 
   <div class="place">
-    <input id="city" type="text" placeholder="Plaats…" autocomplete="off">
+    <input id="city" type="text" placeholder="Plaats…" autocomplete="off" aria-label="Plaats">
     <button id="go">Check</button>
   </div>
   <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
@@ -353,7 +381,23 @@ function setQuip(feels) {
   $("quip").textContent = pool[Math.floor(Math.random() * pool.length)];
 }
 
+// Loading state: show the sun/cloud loader, clear stale content.
+function startLoading(msg) {
+  $("loader").classList.add("on");
+  $("emoji").style.display = "none";
+  $("verdict").textContent = "";
+  $("reason").textContent = msg || "Weer ophalen…";
+  $("details").textContent = "";
+  $("extras").innerHTML = "";
+  $("hours").innerHTML = "";
+}
+function stopLoading() {
+  $("loader").classList.remove("on");
+  $("emoji").style.display = "";
+}
+
 function render(place, d, w) {
+  stopLoading();
   const L = LEVELS[d.level];
   // Above ~30° feels-like: a playful "go for a swim" verdict overrides level 0.
   const heat = d.feels >= 30;
@@ -367,7 +411,7 @@ function render(place, d, w) {
   $("details").textContent =
     `${place} · ${Math.round(d.temp)}° (voelt als ${Math.round(d.feels)}°) · wind ${Math.round(d.wind)} km/u · ${d.weather.desc}`;
   $("extras").innerHTML = accessories(d.feels, d.weather, d.umbrella, w.uv)
-    .map(a => `<span title="${a.label}">${a.icon}</span>`).join("");
+    .map(a => `<span role="img" aria-label="${a.label}" title="${a.label}">${a.icon}</span>`).join("");
   renderHours(w.hours);
   setFx(w);
   setQuip(d.feels);
@@ -394,7 +438,7 @@ function renderHours(hours) {
   if (!hours || !hours.length) { el.innerHTML = ""; return; }
   el.innerHTML = hours.map(h => {
     const color = HOUR_COLORS[baseLevel(h.feels)];
-    return `<button class="hour" type="button">
+    return `<button class="hour" type="button" aria-label="${h.label}: voelt als ${Math.round(h.feels)}°, werkelijk ${Math.round(h.actual)}°">
       <span class="tip">werkelijk ${Math.round(h.actual)}°</span>
       <span class="bar" style="background:${color}"></span>
       <span class="hlabel">${h.label}</span>
@@ -405,6 +449,7 @@ function renderHours(hours) {
 }
 
 function setError(msg) {
+  stopLoading();
   $("emoji").textContent = "🤷";
   $("verdict").textContent = "Geen idee";
   $("reason").textContent = msg;
@@ -572,8 +617,7 @@ async function fetchWeather(lat, lon) {
 }
 
 async function run(name) {
-  $("verdict").textContent = "Even kijken…";
-  $("reason").textContent = `De lucht boven ${name} wordt geraadpleegd.`;
+  startLoading(`Weer boven ${name} ophalen…`);
   try {
     const g = await geocode(name);
     const w = await fetchWeather(g.lat, g.lon);
@@ -585,6 +629,7 @@ async function run(name) {
 }
 
 async function runCoords(lat, lon, label) {
+  startLoading("Weer ophalen…");
   try {
     const w = await fetchWeather(lat, lon);
     render(label, decide(w), w);
@@ -597,8 +642,7 @@ $("go").addEventListener("click", () => { const v = $("city").value.trim(); if (
 $("city").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
 $("geo").addEventListener("click", () => {
   if (!navigator.geolocation) { setError("Je browser deelt geen locatie."); return; }
-  $("verdict").textContent = "Even kijken…";
-  $("reason").textContent = "Locatie ophalen…";
+  startLoading("Locatie ophalen…");
   navigator.geolocation.getCurrentPosition(
     async p => {
       const name = await reverseGeocode(p.coords.latitude, p.coords.longitude);
