@@ -1,0 +1,20 @@
+name: test
+
+# Runs the app's tests on every push and pull request. Cloudflare Pages handles
+# deployment separately (production on main, preview URLs on branches/PRs).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: App tests (structure + coat logic)
+        run: node tests/logic.test.mjs
