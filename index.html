@@ -22,8 +22,9 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    min-height: 100dvh;
     text-align: center;
-    padding: 24px;
+    padding: 32px 24px;
     transition: background 0.6s ease;
     overflow-x: hidden;
   }
@@ -96,8 +97,8 @@
     text-decoration: underline;
   }
   .footer {
-    position: fixed;
-    bottom: 12px;
+    margin-top: 28px;
+    text-align: center;
     font-size: 12px;
     opacity: 0.6;
   }
@@ -377,6 +378,20 @@ async function geocode(name) {
   return { lat: g.latitude, lon: g.longitude, label: [g.name, g.admin1].filter(Boolean).join(", ") };
 }
 
+// Coordinates -> actual town/village name (Nominatim / OpenStreetMap, free, no
+// key). We prefer the settlement fields (village/town/city) over municipality,
+// so merged gemeentes like "Midden-Groningen" don't mask the real place.
+async function reverseGeocode(lat, lon) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=14&accept-language=nl`);
+    const j = await r.json();
+    const a = j.address || {};
+    return a.village || a.town || a.city || a.suburb || a.municipality || a.county || "";
+  } catch {
+    return "";
+  }
+}
+
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day,uv_index` +
@@ -448,10 +463,24 @@ $("go").addEventListener("click", () => { const v = $("city").value.trim(); if (
 $("city").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
 $("geo").addEventListener("click", () => {
   if (!navigator.geolocation) { setError("Je browser deelt geen locatie."); return; }
+  $("verdict").textContent = "Even kijken…";
   $("reason").textContent = "Locatie ophalen…";
   navigator.geolocation.getCurrentPosition(
-    p => runCoords(p.coords.latitude, p.coords.longitude, "jouw locatie"),
-    () => setError("Geen toegang tot locatie. Typ je plaats hierboven.")
+    async p => {
+      const name = await reverseGeocode(p.coords.latitude, p.coords.longitude);
+      if (name) {
+        $("city").value = name;                 // show which place is used
+        localStorage.setItem("jas_city", name);
+      }
+      runCoords(p.coords.latitude, p.coords.longitude, name || "jouw locatie");
+    },
+    err => {
+      const msg = err.code === 1 ? "Je hebt locatietoegang geweigerd. Typ je plaats hierboven."
+        : err.code === 3 ? "Locatie ophalen duurde te lang. Probeer opnieuw of typ je plaats."
+        : "Kon je locatie niet bepalen. Typ je plaats hierboven.";
+      setError(msg);
+    },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
   );
 });
 
