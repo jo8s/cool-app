@@ -17,6 +17,9 @@ check("calls Open-Meteo forecast", html.includes("api.open-meteo.com/v1/forecast
 check("uses geocoding API", html.includes("geocoding-api.open-meteo.com"));
 check("uses feels-like (apparent_temperature)", html.includes("apparent_temperature"));
 check("reads rain probability", html.includes("precipitation_probability"));
+check("requests is_day + uv for night mode & accessories", html.includes("is_day") && html.includes("uv_index"));
+check("has weather-fx layer", html.includes('id="fx"'));
+check("has accessories row", html.includes('id="extras"'));
 check("has geolocation", html.includes("navigator.geolocation"));
 check("lang is Dutch", html.includes('lang="nl"'));
 
@@ -25,8 +28,8 @@ const start = html.indexOf("const LEVELS");
 const end = html.indexOf("// ---------- UI wiring");
 check("logic block present", start !== -1 && end !== -1 && end > start);
 const code = html.slice(start, end);
-const { decide, phrase, LEVELS } = new Function(
-  code + "\nreturn { decide, phrase, LEVELS };"
+const { decide, phrase, LEVELS, accessories } = new Function(
+  code + "\nreturn { decide, phrase, LEVELS, accessories };"
 )();
 
 console.log("\nCoat logic (level: 0 geen jas … 4 blijf binnen):");
@@ -83,6 +86,22 @@ console.log("\nDay-ahead nuance (category change):");
 }
 // Backward-compat: no outlook -> no nuance, no crash
 check("no outlook -> no nuance", !phrase(decide(cases[0].in)).includes("Over "));
+
+console.log("\nAccessories:");
+{
+  const icons = (feels, snow, umbrella, uv) => accessories(feels, { snow }, umbrella, uv).map(a => a.icon);
+  check("hot + high UV -> shorts, sunscreen, sunglasses", (() => {
+    const a = icons(26, false, false, 7);
+    return a.includes("🩳") && a.includes("🧴") && a.includes("🕶️");
+  })());
+  check("rain -> umbrella", icons(12, false, true, 1).includes("☔"));
+  check("freezing -> scarf + gloves", (() => {
+    const a = icons(-5, false, false, 0);
+    return a.includes("🧣") && a.includes("🧤");
+  })());
+  check("snow -> snowman", icons(-1, true, false, 0).includes("⛄"));
+  check("mild & dry -> no accessories", icons(15, false, false, 1).length === 0);
+}
 
 console.log(fails ? `\n❌ FAILED (${fails} check${fails > 1 ? "s" : ""})` : "\n✅ All tests passed.");
 process.exit(fails ? 1 : 0);
