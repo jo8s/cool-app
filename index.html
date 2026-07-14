@@ -103,13 +103,48 @@
   }
   .footer a { color: inherit; }
   .loading .verdict { opacity: 0.5; }
+
+  /* keep all content above the animated background */
+  .emoji, .verdict, .reason, .details, .extras, .place, .geo, .footer { position: relative; z-index: 2; }
+  .extras { margin-top: 14px; font-size: clamp(22px, 5vw, 30px); letter-spacing: 6px; min-height: 1.2em; }
+
+  /* animated weather background */
+  #fx { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+  .drop { position: absolute; top: -12%; width: 2px; height: 12%;
+    background: linear-gradient(transparent, rgba(255,255,255,0.55)); border-radius: 2px;
+    animation: fall linear infinite; }
+  @keyframes fall { to { transform: translateY(120vh); } }
+  .flake { position: absolute; top: -6%; color: rgba(255,255,255,0.9); user-select: none;
+    animation: drift linear infinite; }
+  @keyframes drift { to { transform: translateY(112vh) translateX(24px); } }
+  .star { position: absolute; width: 2px; height: 2px; border-radius: 50%;
+    background: #fff; animation: twinkle ease-in-out infinite; }
+  @keyframes twinkle { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.9; } }
+  .sun-glow { position: fixed; top: -140px; right: -140px; width: 420px; height: 420px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,244,190,0.55), transparent 62%);
+    animation: pulse 6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+  .sun-rays { position: fixed; top: -220px; right: -220px; width: 620px; height: 620px;
+    background: conic-gradient(from 0deg, transparent 0 12deg, rgba(255,244,190,0.10) 12deg 16deg, transparent 16deg 28deg);
+    animation: spin 60s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* night mode: dim the bright gradients */
+  body.night::before { content: ""; position: fixed; inset: 0; z-index: 0;
+    background: rgba(8, 12, 30, 0.5); pointer-events: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .drop, .flake, .star, .sun-glow, .sun-rays { animation: none; }
+  }
 </style>
 </head>
 <body>
+  <div id="fx"></div>
   <div class="emoji" id="emoji">🤔</div>
   <div class="verdict" id="verdict">Even kijken…</div>
   <div class="reason" id="reason">De lucht wordt geraadpleegd.</div>
   <div class="details" id="details"></div>
+  <div class="extras" id="extras"></div>
 
   <div class="place">
     <input id="city" type="text" placeholder="Plaats…" autocomplete="off">
@@ -117,7 +152,7 @@
   </div>
   <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
 
-  <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · gemaakt met liefde &amp; verveling</div>
+  <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></div>
 
 <script>
 // ---------- Coat logic ----------
@@ -154,6 +189,20 @@ function baseLevel(feels) {
 
 // What you need at each level, for the day-ahead nuance sentence.
 const NEED = ["geen jas", "een vestje", "een jas", "een winterjas", "een winterjas"];
+
+// Accessory icons based on conditions. Exposed for testing.
+function accessories(feels, weather, umbrella, uv) {
+  uv = uv || 0;
+  const a = [];
+  if (feels >= 24) a.push({ icon: "🩳", label: "korte broek" });
+  if (uv >= 6) a.push({ icon: "🧴", label: "zonnebrand (hoge UV)" });
+  if (uv >= 3) a.push({ icon: "🕶️", label: "zonnebril" });
+  if (umbrella) a.push({ icon: "☔", label: "paraplu" });
+  if (weather.snow) a.push({ icon: "⛄", label: "sneeuwpret" });
+  if (feels <= 4) a.push({ icon: "🧣", label: "sjaal / muts" });
+  if (feels <= -3) a.push({ icon: "🧤", label: "handschoenen" });
+  return a;
+}
 
 // Core decision. Exposed for testing.
 // `outlook` is optional: { maxFeels, maxHour, minFeels, minHour } for the rest
@@ -236,15 +285,18 @@ function phrase(d) {
 // ---------- UI wiring ----------
 const $ = id => document.getElementById(id);
 
-function render(place, d) {
+function render(place, d, w) {
   const L = LEVELS[d.level];
-  document.body.style.setProperty("--bg", "#000");
   document.body.style.background = L.bg;
+  document.body.classList.toggle("night", w.isDay === false);
   $("emoji").textContent = L.emoji;
   $("verdict").textContent = L.label;
   $("reason").textContent = phrase(d);
   $("details").textContent =
     `${place} · ${Math.round(d.temp)}° (voelt als ${Math.round(d.feels)}°) · wind ${Math.round(d.wind)} km/u · ${d.weather.desc}`;
+  $("extras").innerHTML = accessories(d.feels, d.weather, d.umbrella, w.uv)
+    .map(a => `<span title="${a.label}">${a.icon}</span>`).join("");
+  setFx(w);
   document.title = `${L.label} — moet ik een jas aan? (${place})`;
 }
 
@@ -253,6 +305,68 @@ function setError(msg) {
   $("verdict").textContent = "Geen idee";
   $("reason").textContent = msg;
   $("details").textContent = "";
+  $("extras").innerHTML = "";
+  setFx(null);
+}
+
+// Which weather effect to show for the current conditions.
+function fxKind(w) {
+  const c = classifyWeather(w.weatherCode);
+  if (c.snow) return "snow";
+  if (c.rain) return "rain";
+  if (w.weatherCode <= 1) return "sun";   // clear / mainly clear
+  return "none";
+}
+
+// Populate the animated background: rain, snow, sun rays, and/or night stars.
+function setFx(w) {
+  const fx = $("fx");
+  fx.innerHTML = "";
+  if (!w) return;
+  const isDay = w.isDay !== false;
+  const kind = fxKind(w);
+  const frag = document.createDocumentFragment();
+
+  if (kind === "rain") {
+    for (let i = 0; i < 44; i++) {
+      const d = document.createElement("div");
+      d.className = "drop";
+      d.style.left = Math.random() * 100 + "%";
+      d.style.animationDuration = (0.5 + Math.random() * 0.5) + "s";
+      d.style.animationDelay = (-Math.random() * 2) + "s";
+      d.style.opacity = 0.3 + Math.random() * 0.5;
+      frag.appendChild(d);
+    }
+  } else if (kind === "snow") {
+    for (let i = 0; i < 34; i++) {
+      const f = document.createElement("div");
+      f.className = "flake";
+      f.textContent = "❄";
+      f.style.left = Math.random() * 100 + "%";
+      f.style.fontSize = (8 + Math.random() * 12) + "px";
+      f.style.animationDuration = (4 + Math.random() * 5) + "s";
+      f.style.animationDelay = (-Math.random() * 6) + "s";
+      f.style.opacity = 0.5 + Math.random() * 0.5;
+      frag.appendChild(f);
+    }
+  } else if (kind === "sun" && isDay) {
+    const rays = document.createElement("div"); rays.className = "sun-rays"; frag.appendChild(rays);
+    const glow = document.createElement("div"); glow.className = "sun-glow"; frag.appendChild(glow);
+  }
+
+  // Twinkling stars on any clear-ish night.
+  if (!isDay && kind !== "rain" && kind !== "snow") {
+    for (let i = 0; i < 40; i++) {
+      const s = document.createElement("div");
+      s.className = "star";
+      s.style.left = Math.random() * 100 + "%";
+      s.style.top = Math.random() * 70 + "%";
+      s.style.animationDuration = (2 + Math.random() * 3) + "s";
+      s.style.animationDelay = (-Math.random() * 4) + "s";
+      frag.appendChild(s);
+    }
+  }
+  fx.appendChild(frag);
 }
 
 async function geocode(name) {
@@ -265,7 +379,7 @@ async function geocode(name) {
 
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m` +
+    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day,uv_index` +
     `&hourly=apparent_temperature,precipitation_probability&forecast_hours=16&timezone=auto`;
   const r = await fetch(url);
   const j = await r.json();
@@ -303,6 +417,8 @@ async function fetchWeather(lat, lon) {
     weatherCode: c.weather_code,
     rainSoonProb,
     outlook,
+    isDay: c.is_day === undefined ? true : c.is_day === 1,
+    uv: c.uv_index,
   };
 }
 
@@ -312,8 +428,7 @@ async function run(name) {
   try {
     const g = await geocode(name);
     const w = await fetchWeather(g.lat, g.lon);
-    const d = decide(w);
-    render(g.label, d);
+    render(g.label, decide(w), w);
     localStorage.setItem("jas_city", name);
   } catch (e) {
     setError("Kon het weer niet ophalen: " + e.message);
@@ -323,7 +438,7 @@ async function run(name) {
 async function runCoords(lat, lon, label) {
   try {
     const w = await fetchWeather(lat, lon);
-    render(label, decide(w));
+    render(label, decide(w), w);
   } catch (e) {
     setError("Kon het weer niet ophalen: " + e.message);
   }
