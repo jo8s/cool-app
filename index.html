@@ -139,6 +139,15 @@
   .wind { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .wind-meta { font-size: 12px; font-weight: 600; opacity: 0.85; }
 
+  /* On short screens, shrink only the big elements + page edges (NOT the gaps
+     between blocks) so the whole stack — incl. the hourly strip — always fits. */
+  @media (max-height: 820px) {
+    body { padding-top: 18px; padding-bottom: 18px; }
+    .emoji { font-size: clamp(44px, 12vw, 84px); }
+    .verdict { font-size: clamp(30px, 9vw, 72px); }
+    .wind svg { width: 50px; height: 50px; }
+  }
+
   /* hourly strip (now -> midnight); tap/hover a cell for the actual temp */
   .hours {
     display: flex;
