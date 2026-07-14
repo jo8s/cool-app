@@ -24,7 +24,7 @@
     min-height: 100vh;
     min-height: 100dvh;
     text-align: center;
-    padding: 24px 24px 72px;   /* reserve room for the fixed footer */
+    padding: 32px 24px;
     transition: background 0.6s ease;
     overflow-x: hidden;
   }
@@ -97,10 +97,7 @@
     text-decoration: underline;
   }
   .footer {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 12px;
+    margin-top: 28px;
     text-align: center;
     font-size: 12px;
     opacity: 0.6;
@@ -381,6 +378,17 @@ async function geocode(name) {
   return { lat: g.latitude, lon: g.longitude, label: [g.name, g.admin1].filter(Boolean).join(", ") };
 }
 
+// Coordinates -> nearest place name (BigDataCloud, free, no API key).
+async function reverseGeocode(lat, lon) {
+  try {
+    const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=nl`);
+    const j = await r.json();
+    return j.city || j.locality || j.principalSubdivision || "";
+  } catch {
+    return "";
+  }
+}
+
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day,uv_index` +
@@ -455,7 +463,14 @@ $("geo").addEventListener("click", () => {
   $("verdict").textContent = "Even kijken…";
   $("reason").textContent = "Locatie ophalen…";
   navigator.geolocation.getCurrentPosition(
-    p => runCoords(p.coords.latitude, p.coords.longitude, "jouw locatie"),
+    async p => {
+      const name = await reverseGeocode(p.coords.latitude, p.coords.longitude);
+      if (name) {
+        $("city").value = name;                 // show which place is used
+        localStorage.setItem("jas_city", name);
+      }
+      runCoords(p.coords.latitude, p.coords.longitude, name || "jouw locatie");
+    },
     err => {
       const msg = err.code === 1 ? "Je hebt locatietoegang geweigerd. Typ je plaats hierboven."
         : err.code === 3 ? "Locatie ophalen duurde te lang. Probeer opnieuw of typ je plaats."
