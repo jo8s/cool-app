@@ -1,14 +1,10 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  // Name must match your Cloudflare Worker's name.
   "name": "cool-app",
-  "compatibility_date": "2026-07-14",
-  "observability": {
-    "enabled": true
-  },
+  "compatibility_date": "2026-07-12",
+  // Static-assets-only Worker: no server code, just serve ./dist.
+  // The build command (mkdir -p dist && cp index.html dist/) fills this folder.
   "assets": {
-    "directory": "."
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+    "directory": "./dist"
+  }
 }
