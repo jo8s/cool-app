@@ -25,6 +25,10 @@ check("has random footer quip", html.includes('id="quip"') && html.includes("gee
 check("cold quip only under 10°", html.includes('feels < 10') && html.includes("dat bouwt karakter"));
 check("hourly strip shows actual temp on tap/hover", html.includes("werkelijk ${Math.round(h.actual)}"));
 check("requests hourly temp + code for the strip", html.includes("hourly=temperature_2m,apparent_temperature,weather_code"));
+check("verdict is an aria-live region", /id="verdict"[^>]*aria-live/.test(html));
+check("search input has an aria-label", /id="city"[^>]*aria-label/.test(html));
+check("has sun/cloud loader", html.includes('id="loader"') && html.includes("l-sun") && html.includes("l-cloud"));
+check("keyboard focus styles present", html.includes(":focus-visible"));
 check("has geolocation", html.includes("navigator.geolocation"));
 check("reverse-geocodes GPS to a place name", html.includes("nominatim") && /reverseGeocode/.test(html));
 check("fills the search box from geolocation", /\$\("city"\)\.value\s*=/.test(html));
