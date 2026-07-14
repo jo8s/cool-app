@@ -207,7 +207,7 @@
   </div>
   <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
 
-  <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></div>
+  <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · <span id="quip"></span></div>
 
 <script>
 // ---------- Coat logic ----------
@@ -252,6 +252,7 @@ const NEED = ["geen jas", "een vestje", "een jas", "een winterjas", "een winterj
 function accessories(feels, weather, umbrella, uv) {
   uv = uv || 0;
   const a = [];
+  if (feels >= 30) a.push({ icon: "🌊", label: "zwemkleding — neem een duik" });
   if (feels >= 24) a.push({ icon: "🩳", label: "korte broek" });
   if (uv >= 6) a.push({ icon: "🧴", label: "zonnebrand (hoge UV)" });
   if (uv >= 3) a.push({ icon: "🕶️", label: "zonnebril" });
@@ -296,14 +297,15 @@ function phrase(d) {
   let line = [
     "Lekker weer joh, niks aan de hand.",
     "Een vestje is genoeg.",
-    "Ja, gewoon een jas.",
+    "Gewoon een jas.",
     "Winterjas aan!",
     "Serieus, blijf binnen.",
   ][d.level];
 
   // Fun edge cases
-  if (d.level === 0 && d.feels >= 26) line = "Een jas?? Ben je gek. 🩳";
+  if (d.level === 0 && d.feels >= 25) line = "Een jas?? Ben je gek. 🩳";
   if (d.level === 4 && d.feels <= -5) line = "Doe de deur maar dicht. 🥶";
+  if (d.feels >= 30) line = "Vergeet die jas — zwemkleding aan en zo snel mogelijk het water in! 🌊";
 
   // Day-ahead nuance: fire whenever the coat *category* changes later today.
   const o = d.outlook;
@@ -337,12 +339,30 @@ function phrase(d) {
 // ---------- UI wiring ----------
 const $ = id => document.getElementById(id);
 
+// Random footer quip. The cold one only joins the pool when it feels < 10°.
+const QUIPS = [
+  "bij twijfel: gewoon doen",
+  "klopt het niet? geef de wolken de schuld",
+  "fout advies? dat was de wind",
+  "we hadden gelijk tot het ging waaien",
+  "er bestaat geen slecht weer, alleen verkeerde kleding",
+];
+function setQuip(feels) {
+  const pool = QUIPS.slice();
+  if (typeof feels === "number" && feels < 10) pool.push("koud? dat bouwt karakter");
+  $("quip").textContent = pool[Math.floor(Math.random() * pool.length)];
+}
+
 function render(place, d, w) {
   const L = LEVELS[d.level];
-  document.body.style.background = L.bg;
+  // Above ~30° feels-like: a playful "go for a swim" verdict overrides level 0.
+  const heat = d.feels >= 30;
+  const label = heat ? "ZWEMMEN!" : L.label;
+  const emoji = heat ? "🏊" : L.emoji;
+  document.body.style.background = heat ? "linear-gradient(160deg,#ffcf4d,#ff6a3d)" : L.bg;
   document.body.classList.toggle("night", w.isDay === false);
-  $("emoji").textContent = L.emoji;
-  $("verdict").textContent = L.label;
+  $("emoji").textContent = emoji;
+  $("verdict").textContent = label;
   $("reason").textContent = phrase(d);
   $("details").textContent =
     `${place} · ${Math.round(d.temp)}° (voelt als ${Math.round(d.feels)}°) · wind ${Math.round(d.wind)} km/u · ${d.weather.desc}`;
@@ -350,7 +370,8 @@ function render(place, d, w) {
     .map(a => `<span title="${a.label}">${a.icon}</span>`).join("");
   renderHours(w.hours);
   setFx(w);
-  document.title = `${L.label} — moet ik m'n jas aan? (${place})`;
+  setQuip(d.feels);
+  document.title = `${label} — moet ik m'n jas aan? (${place})`;
 }
 
 // Emoji for a WMO weather code (day/night aware).
@@ -600,6 +621,7 @@ $("geo").addEventListener("click", () => {
 // Start: last used city, or Amsterdam
 const start = localStorage.getItem("jas_city") || "Amsterdam";
 $("city").value = start;
+setQuip();          // populate the footer immediately, before weather loads
 run(start);
 </script>
 </body>
