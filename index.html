@@ -56,6 +56,7 @@
   }
   .place {
     position: relative;
+    z-index: 4;               /* keep the suggestions dropdown above the geo button */
     margin-top: 34px;
     display: flex;
     gap: 8px;
@@ -133,7 +134,7 @@
   .loading .verdict { opacity: 0.5; }
 
   /* keep all content above the animated background */
-  .emoji, .verdict, .reason, .details, .extras, .hours, .place, .geo, .footer { position: relative; z-index: 2; }
+  .emoji, .verdict, .reason, .details, .extras, .hours, .geo, .footer { position: relative; z-index: 2; }
 
   /* hourly strip (now -> midnight); tap/hover a cell for the actual temp */
   .hours {
