@@ -22,8 +22,9 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    min-height: 100dvh;
     text-align: center;
-    padding: 24px;
+    padding: 24px 24px 72px;   /* reserve room for the fixed footer */
     transition: background 0.6s ease;
     overflow-x: hidden;
   }
@@ -97,7 +98,10 @@
   }
   .footer {
     position: fixed;
+    left: 0;
+    right: 0;
     bottom: 12px;
+    text-align: center;
     font-size: 12px;
     opacity: 0.6;
   }
@@ -448,10 +452,17 @@ $("go").addEventListener("click", () => { const v = $("city").value.trim(); if (
 $("city").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
 $("geo").addEventListener("click", () => {
   if (!navigator.geolocation) { setError("Je browser deelt geen locatie."); return; }
+  $("verdict").textContent = "Even kijken…";
   $("reason").textContent = "Locatie ophalen…";
   navigator.geolocation.getCurrentPosition(
     p => runCoords(p.coords.latitude, p.coords.longitude, "jouw locatie"),
-    () => setError("Geen toegang tot locatie. Typ je plaats hierboven.")
+    err => {
+      const msg = err.code === 1 ? "Je hebt locatietoegang geweigerd. Typ je plaats hierboven."
+        : err.code === 3 ? "Locatie ophalen duurde te lang. Probeer opnieuw of typ je plaats."
+        : "Kon je locatie niet bepalen. Typ je plaats hierboven.";
+      setError(msg);
+    },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
   );
 });
 
