@@ -378,12 +378,15 @@ async function geocode(name) {
   return { lat: g.latitude, lon: g.longitude, label: [g.name, g.admin1].filter(Boolean).join(", ") };
 }
 
-// Coordinates -> nearest place name (BigDataCloud, free, no API key).
+// Coordinates -> actual town/village name (Nominatim / OpenStreetMap, free, no
+// key). We prefer the settlement fields (village/town/city) over municipality,
+// so merged gemeentes like "Midden-Groningen" don't mask the real place.
 async function reverseGeocode(lat, lon) {
   try {
-    const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=nl`);
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=14&accept-language=nl`);
     const j = await r.json();
-    return j.city || j.locality || j.principalSubdivision || "";
+    const a = j.address || {};
+    return a.village || a.town || a.city || a.suburb || a.municipality || a.county || "";
   } catch {
     return "";
   }

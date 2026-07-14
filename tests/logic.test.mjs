@@ -21,7 +21,7 @@ check("requests is_day + uv for night mode & accessories", html.includes("is_day
 check("has weather-fx layer", html.includes('id="fx"'));
 check("has accessories row", html.includes('id="extras"'));
 check("has geolocation", html.includes("navigator.geolocation"));
-check("reverse-geocodes GPS to a place name", html.includes("reverse-geocode-client"));
+check("reverse-geocodes GPS to a place name", html.includes("nominatim") && /reverseGeocode/.test(html));
 check("fills the search box from geolocation", /\$\("city"\)\.value\s*=/.test(html));
 check("lang is Dutch", html.includes('lang="nl"'));
 
