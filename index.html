@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Moet ik een jas aan?</title>
-<meta name="description" content="Het antwoord op de belangrijkste vraag van de dag: moet ik een jas aan?">
+<title>Moet ik m'n jas aan?</title>
+<meta name="description" content="Het antwoord op de belangrijkste vraag van de dag: moet ik m'n jas aan?">
 <style>
   :root {
     --bg: #7fb2e6;
@@ -106,7 +106,60 @@
   .loading .verdict { opacity: 0.5; }
 
   /* keep all content above the animated background */
-  .emoji, .verdict, .reason, .details, .extras, .place, .geo, .footer { position: relative; z-index: 2; }
+  .emoji, .verdict, .reason, .details, .extras, .hours, .place, .geo, .footer { position: relative; z-index: 2; }
+
+  /* hourly strip (now -> midnight); tap/hover a cell for the actual temp */
+  .hours {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    max-width: min(560px, 92vw);
+    overflow-x: auto;
+    /* top padding leaves room for the tooltip inside the scroll box, so it
+       isn't clipped (overflow-x:auto also clips vertically) */
+    padding: 32px 4px 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .hours::-webkit-scrollbar { display: none; }
+  .hour {
+    flex: 0 0 auto;
+    width: 58px;
+    position: relative;
+    border: none;
+    cursor: pointer;
+    background: rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 8px 0;
+    color: inherit;
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .hour .bar { width: 60%; height: 4px; border-radius: 2px; }
+  .hour .hlabel { font-size: 11px; opacity: 0.8; }
+  .hour .hemoji { font-size: 18px; line-height: 1.1; }
+  .hour .hfeels { font-size: 17px; font-weight: 800; }
+  .hour .tip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 6px;
+    background: #1f2d44;
+    color: #fff;
+    font-size: 11px;
+    white-space: nowrap;
+    padding: 4px 8px;
+    border-radius: 6px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+    z-index: 3;
+  }
+  .hour:hover .tip, .hour.show .tip { opacity: 1; }
   .extras { margin-top: 14px; font-size: clamp(22px, 5vw, 30px); letter-spacing: 6px; min-height: 1.2em; }
 
   /* animated weather background */
@@ -146,6 +199,7 @@
   <div class="reason" id="reason">De lucht wordt geraadpleegd.</div>
   <div class="details" id="details"></div>
   <div class="extras" id="extras"></div>
+  <div class="hours" id="hours"></div>
 
   <div class="place">
     <input id="city" type="text" placeholder="Plaats…" autocomplete="off">
@@ -153,7 +207,7 @@
   </div>
   <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
 
-  <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></div>
+  <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · <span id="quip"></span></div>
 
 <script>
 // ---------- Coat logic ----------
@@ -165,6 +219,9 @@ const LEVELS = [
   { label: "JA!",   sub: "Winterjas",    emoji: "🧣", bg: "linear-gradient(160deg,#6d8bb5,#3a4f6e)" },
   { label: "BLIJF BINNEN", sub: "Serieus", emoji: "🥶", bg: "linear-gradient(160deg,#8fa8c8,#2a3550)" },
 ];
+
+// Solid accent per level, for the hourly strip's category bar.
+const HOUR_COLORS = ["#ff9e3d", "#4bb36b", "#4a7fc0", "#3a4f6e", "#2a3550"];
 
 // WMO weather codes -> {rain, snow, thunder, desc}
 function classifyWeather(code) {
@@ -195,6 +252,7 @@ const NEED = ["geen jas", "een vestje", "een jas", "een winterjas", "een winterj
 function accessories(feels, weather, umbrella, uv) {
   uv = uv || 0;
   const a = [];
+  if (feels >= 30) a.push({ icon: "🌊", label: "zwemkleding — neem een duik" });
   if (feels >= 24) a.push({ icon: "🩳", label: "korte broek" });
   if (uv >= 6) a.push({ icon: "🧴", label: "zonnebrand (hoge UV)" });
   if (uv >= 3) a.push({ icon: "🕶️", label: "zonnebril" });
@@ -233,26 +291,21 @@ function decide({ feels, temp, wind, weatherCode, rainSoonProb, outlook }) {
   return { level, umbrella, weather: w, reasons, feels, temp, wind, outlook: outlook || null };
 }
 
-// Build a Dutch one-liner from the decision.
+// Build a short Dutch verdict line. Facts (temp, wind, weather) live in the
+// details row and the accessory icons, so this line stays punchy.
 function phrase(d) {
-  const t = Math.round(d.feels);
-  const base = [
-    `Lekker weer joh — ${t}° en niks aan de hand.`,
-    `Een vestje is genoeg, ${t}° gevoelstemperatuur.`,
-    `Ja, gewoon een jas. Het voelt als ${t}°.`,
-    `Winterjas aan! Het voelt als ${t}°.`,
-    `Het voelt als ${t}°. Overweeg gewoon binnen te blijven.`,
+  let line = [
+    "Lekker weer joh, niks aan de hand.",
+    "Een vestje is genoeg.",
+    "Gewoon een jas.",
+    "Winterjas aan!",
+    "Serieus, blijf binnen.",
   ][d.level];
 
   // Fun edge cases
-  let line = base;
-  if (d.level === 0 && d.feels >= 26) line = `Een jas?? Ben je gek. Het voelt als ${t}°. 🩳`;
-  if (d.level === 4 && d.feels <= -5) line = `Het voelt als ${t}°. Doe de deur maar dicht. 🥶`;
-
-  if (d.reasons.length) {
-    line += " (" + d.reasons.join(", ") + ")";
-  }
-  if (d.umbrella) line += " Neem een paraplu ☔.";
+  if (d.level === 0 && d.feels >= 25) line = "Een jas?? Ben je gek. 🩳";
+  if (d.level === 4 && d.feels <= -5) line = "Doe de deur maar dicht. 🥶";
+  if (d.feels >= 30) line = "Vergeet die jas — zwemkleding aan en zo snel mogelijk het water in! 🌊";
 
   // Day-ahead nuance: fire whenever the coat *category* changes later today.
   const o = d.outlook;
@@ -286,19 +339,69 @@ function phrase(d) {
 // ---------- UI wiring ----------
 const $ = id => document.getElementById(id);
 
+// Random footer quip. The cold one only joins the pool when it feels < 10°.
+const QUIPS = [
+  "bij twijfel: gewoon doen",
+  "klopt het niet? geef de wolken de schuld",
+  "fout advies? dat was de wind",
+  "we hadden gelijk tot het ging waaien",
+  "er bestaat geen slecht weer, alleen verkeerde kleding",
+];
+function setQuip(feels) {
+  const pool = QUIPS.slice();
+  if (typeof feels === "number" && feels < 10) pool.push("koud? dat bouwt karakter");
+  $("quip").textContent = pool[Math.floor(Math.random() * pool.length)];
+}
+
 function render(place, d, w) {
   const L = LEVELS[d.level];
-  document.body.style.background = L.bg;
+  // Above ~30° feels-like: a playful "go for a swim" verdict overrides level 0.
+  const heat = d.feels >= 30;
+  const label = heat ? "ZWEMMEN!" : L.label;
+  const emoji = heat ? "🏊" : L.emoji;
+  document.body.style.background = heat ? "linear-gradient(160deg,#ffcf4d,#ff6a3d)" : L.bg;
   document.body.classList.toggle("night", w.isDay === false);
-  $("emoji").textContent = L.emoji;
-  $("verdict").textContent = L.label;
+  $("emoji").textContent = emoji;
+  $("verdict").textContent = label;
   $("reason").textContent = phrase(d);
   $("details").textContent =
     `${place} · ${Math.round(d.temp)}° (voelt als ${Math.round(d.feels)}°) · wind ${Math.round(d.wind)} km/u · ${d.weather.desc}`;
   $("extras").innerHTML = accessories(d.feels, d.weather, d.umbrella, w.uv)
     .map(a => `<span title="${a.label}">${a.icon}</span>`).join("");
+  renderHours(w.hours);
   setFx(w);
-  document.title = `${L.label} — moet ik een jas aan? (${place})`;
+  setQuip(d.feels);
+  document.title = `${label} — moet ik m'n jas aan? (${place})`;
+}
+
+// Emoji for a WMO weather code (day/night aware).
+function weatherEmoji(code, day) {
+  if (code >= 95) return "⛈️";
+  if (code >= 71 && code <= 77) return "🌨️";
+  if (code >= 85) return "🌨️";
+  if (code >= 80) return "🌦️";
+  if (code >= 61) return "🌧️";
+  if (code >= 51) return "🌦️";
+  if (code >= 45) return "🌫️";
+  if (code >= 3) return "☁️";
+  if (code >= 1) return day ? "🌤️" : "☁️";
+  return day ? "☀️" : "🌙";   // 0 = clear
+}
+
+// Build the hourly strip. Big number = feels-like; tap/hover reveals actual temp.
+function renderHours(hours) {
+  const el = $("hours");
+  if (!hours || !hours.length) { el.innerHTML = ""; return; }
+  el.innerHTML = hours.map(h => {
+    const color = HOUR_COLORS[baseLevel(h.feels)];
+    return `<button class="hour" type="button">
+      <span class="tip">werkelijk ${Math.round(h.actual)}°</span>
+      <span class="bar" style="background:${color}"></span>
+      <span class="hlabel">${h.label}</span>
+      <span class="hemoji">${weatherEmoji(h.code, h.day)}</span>
+      <span class="hfeels">${Math.round(h.feels)}°</span>
+    </button>`;
+  }).join("");
 }
 
 function setError(msg) {
@@ -307,8 +410,18 @@ function setError(msg) {
   $("reason").textContent = msg;
   $("details").textContent = "";
   $("extras").innerHTML = "";
+  $("hours").innerHTML = "";
   setFx(null);
 }
+
+// Tap an hour cell to toggle its actual-temp tooltip (hover works on desktop).
+$("hours").addEventListener("click", e => {
+  const cell = e.target.closest(".hour");
+  if (!cell) return;
+  const wasShown = cell.classList.contains("show");
+  $("hours").querySelectorAll(".hour.show").forEach(c => c.classList.remove("show"));
+  if (!wasShown) cell.classList.add("show");
+});
 
 // Which weather effect to show for the current conditions.
 function fxKind(w) {
@@ -395,7 +508,8 @@ async function reverseGeocode(lat, lon) {
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day,uv_index` +
-    `&hourly=apparent_temperature,precipitation_probability&forecast_hours=16&timezone=auto`;
+    `&hourly=temperature_2m,apparent_temperature,weather_code,is_day,precipitation_probability` +
+    `&forecast_hours=24&timezone=auto`;
   const r = await fetch(url);
   const j = await r.json();
   const c = j.current;
@@ -425,7 +539,27 @@ async function fetchWeather(lat, lon) {
     };
   }
 
+  // Hourly strip for the rest of today (now → 23:00).
+  const tempsArr = H.temperature_2m || [];
+  const codesArr = H.weather_code || [];
+  const dayArr = H.is_day || [];
+  const hours = [];
+  if (times.length) {
+    const today = (c.time || times[0]).slice(0, 10);
+    for (let i = 0; i < times.length; i++) {
+      if (i > 0 && times[i].slice(0, 10) !== today) break;   // stop at midnight
+      hours.push({
+        label: i === 0 ? "nu" : times[i].slice(11, 16),
+        feels: feelsArr[i],
+        actual: tempsArr[i],
+        code: codesArr[i],
+        day: dayArr[i] === undefined ? true : dayArr[i] === 1,
+      });
+    }
+  }
+
   return {
+    hours,
     temp: c.temperature_2m,
     feels: c.apparent_temperature,
     wind: c.wind_speed_10m,
@@ -487,6 +621,7 @@ $("geo").addEventListener("click", () => {
 // Start: last used city, or Amsterdam
 const start = localStorage.getItem("jas_city") || "Amsterdam";
 $("city").value = start;
+setQuip();          // populate the footer immediately, before weather loads
 run(start);
 </script>
 </body>

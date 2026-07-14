@@ -20,6 +20,11 @@ check("reads rain probability", html.includes("precipitation_probability"));
 check("requests is_day + uv for night mode & accessories", html.includes("is_day") && html.includes("uv_index"));
 check("has weather-fx layer", html.includes('id="fx"'));
 check("has accessories row", html.includes('id="extras"'));
+check("has hourly strip", html.includes('id="hours"') && /renderHours/.test(html));
+check("has random footer quip", html.includes('id="quip"') && html.includes("geef de wolken de schuld"));
+check("cold quip only under 10°", html.includes('feels < 10') && html.includes("dat bouwt karakter"));
+check("hourly strip shows actual temp on tap/hover", html.includes("werkelijk ${Math.round(h.actual)}"));
+check("requests hourly temp + code for the strip", html.includes("hourly=temperature_2m,apparent_temperature,weather_code"));
 check("has geolocation", html.includes("navigator.geolocation"));
 check("reverse-geocodes GPS to a place name", html.includes("nominatim") && /reverseGeocode/.test(html));
 check("fills the search box from geolocation", /\$\("city"\)\.value\s*=/.test(html));
@@ -103,6 +108,15 @@ console.log("\nAccessories:");
   })());
   check("snow -> snowman", icons(-1, true, false, 0).includes("⛄"));
   check("mild & dry -> no accessories", icons(15, false, false, 1).length === 0);
+  check("30°+ -> swim icon", icons(31, false, false, 8).includes("🌊"));
+}
+
+console.log("\nHeat verdict:");
+{
+  const d = decide({ feels: 32, temp: 33, wind: 4, weatherCode: 0, rainSoonProb: 0 });
+  const p = phrase(d);
+  check("30°+ -> swim advice", p.includes("zwemkleding") && p.includes("water in"));
+  check("29° -> no swim advice", !phrase(decide({ feels: 29, temp: 30, wind: 4, weatherCode: 0, rainSoonProb: 0 })).includes("zwemkleding"));
 }
 
 console.log(fails ? `\n❌ FAILED (${fails} check${fails > 1 ? "s" : ""})` : "\n✅ All tests passed.");
