@@ -134,7 +134,9 @@
   .loading .verdict { opacity: 0.5; }
 
   /* keep all content above the animated background */
-  .emoji, .verdict, .reason, .details, .extras, .hours, .geo, .footer { position: relative; z-index: 2; }
+  .emoji, .verdict, .reason, .details, .extras, .wind, .hours, .geo, .footer { position: relative; z-index: 2; }
+  .wind { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .wind-meta { font-size: 12px; font-weight: 600; opacity: 0.85; }
 
   /* hourly strip (now -> midnight); tap/hover a cell for the actual temp */
   .hours {
@@ -255,6 +257,7 @@
   <div class="reason" id="reason" aria-live="polite">De lucht wordt geraadpleegd.</div>
   <div class="details" id="details"></div>
   <div class="extras" id="extras"></div>
+  <div class="wind" id="wind"></div>
   <div class="hours" id="hours"></div>
 
   <div class="place">
@@ -384,6 +387,7 @@ function phrase(d) {
   if (d.level === 0 && d.feels >= 25) line = pick(["Een jas?? Ben je gek. 🩳", "Jas bij dit weer? Echt niet. 🩳"]);
   if (d.level === 4 && d.feels <= -5) line = "Doe de deur maar dicht. 🥶";
   if (d.feels >= 30) line = "Vergeet die jas — zwemkleding aan en zo snel mogelijk het water in! 🌊";
+  if (d.feels >= 30 && d.weather && d.weather.rain) line = "Snikheet én een bui — trek je zwemkleding aan, natter word je toch niet. 🌊";
   if (d.feels <= -10) line = "IJskoud. Winterjas, muts én een héél goede reden om te gaan. 🥶";
   if (d.wind >= 60) line = "Storm! Zorg dat je jas niet wegwaait. 🌬️";
   if (d.weather && d.weather.thunder) line = "Onweer op komst — laat die jas, blijf lekker binnen. ⛈️";
@@ -450,6 +454,7 @@ function startLoading(msg) {
   $("reason").textContent = msg || "Weer ophalen…";
   $("details").textContent = "";
   $("extras").innerHTML = "";
+  $("wind").innerHTML = "";
   $("hours").innerHTML = "";
 }
 function stopLoading() {
@@ -477,9 +482,10 @@ function render(place, d, w) {
   $("verdict").textContent = label;
   $("reason").textContent = phrase(d);
   $("details").textContent =
-    `${place} · ${Math.round(d.temp)}° (voelt als ${Math.round(d.feels)}°) · wind ${Math.round(d.wind)} km/u · ${d.weather.desc}`;
+    `${place} · ${Math.round(d.temp)}° (voelt als ${Math.round(d.feels)}°) · ${d.weather.desc}`;
   $("extras").innerHTML = accessories(d.feels, d.weather, d.umbrella, w.uv)
     .map(a => `<span role="img" aria-label="${a.label}" title="${a.label}">${a.icon}</span>`).join("");
+  renderWind(d.wind, w.windDir);
   renderHours(w.hours);
   setFx(w);
   setQuip(d.feels);
@@ -516,6 +522,26 @@ function renderHours(hours) {
   }).join("");
 }
 
+// Wind compass: an arrow pointing where the wind blows, plus source direction.
+function renderWind(speed, dir) {
+  const el = $("wind");
+  if (speed == null || dir == null) { el.innerHTML = ""; return; }
+  const DIRS = ["N", "NO", "O", "ZO", "Z", "ZW", "W", "NW"];
+  const from = DIRS[Math.round(dir / 45) % 8];
+  el.innerHTML = `
+    <svg viewBox="0 0 64 64" width="58" height="58" role="img" aria-label="Wind ${Math.round(speed)} kilometer per uur uit het ${from}">
+      <circle cx="32" cy="32" r="27" fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/>
+      <text x="32" y="13" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.8)">N</text>
+      <text x="54" y="35" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.55)">O</text>
+      <text x="32" y="59" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.55)">Z</text>
+      <text x="10" y="35" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.55)">W</text>
+      <g transform="rotate(${dir + 180} 32 32)">
+        <path d="M32 15 L38 42 L32 35 L26 42 Z" fill="#fff"/>
+      </g>
+    </svg>
+    <div class="wind-meta">${Math.round(speed)} km/u · uit ${from}</div>`;
+}
+
 function setError(msg) {
   stopLoading();
   $("emoji").textContent = "🤷";
@@ -523,6 +549,7 @@ function setError(msg) {
   $("reason").textContent = msg;
   $("details").textContent = "";
   $("extras").innerHTML = "";
+  $("wind").innerHTML = "";
   $("hours").innerHTML = "";
   setFx(null);
 }
@@ -620,7 +647,7 @@ async function reverseGeocode(lat, lon) {
 
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day,uv_index` +
+    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day,uv_index` +
     `&hourly=temperature_2m,apparent_temperature,weather_code,is_day,precipitation_probability` +
     `&past_days=1&forecast_days=1&timezone=auto`;
   const r = await fetch(url);
@@ -682,6 +709,7 @@ async function fetchWeather(lat, lon) {
     temp: c.temperature_2m,
     feels: c.apparent_temperature,
     wind: c.wind_speed_10m,
+    windDir: c.wind_direction_10m,
     weatherCode: c.weather_code,
     rainSoonProb,
     outlook,

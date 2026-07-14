@@ -24,6 +24,7 @@ check("has hourly strip", html.includes('id="hours"') && /renderHours/.test(html
 check("has search suggestions", html.includes('id="suggest"') && /loadSuggest/.test(html) && html.includes("count=5"));
 check("compares with yesterday", html.includes("past_days=1") && html.includes("vsYesterday"));
 check("shareable ?plaats= link", html.includes('get("plaats")') && html.includes("history.replaceState"));
+check("has wind compass", html.includes('id="wind"') && /renderWind/.test(html) && html.includes("wind_direction_10m"));
 check("has random footer quip", html.includes('id="quip"') && html.includes("geef de wolken de schuld"));
 check("cold quip only under 10°", html.includes('feels < 10') && html.includes("dat bouwt karakter"));
 check("hourly strip shows actual temp on tap/hover", html.includes("werkelijk ${Math.round(h.actual)}"));
@@ -139,6 +140,8 @@ console.log("\nVariety, easter eggs & yesterday:");
   check("thunder -> onweer easter egg", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 96, rainSoonProb: 0 })).includes("Onweer"));
   check("gale -> storm easter egg", phrase(decide({ feels: 8, temp: 9, wind: 70, weatherCode: 3, rainSoonProb: 0 })).includes("Storm"));
   check("-10° -> ijskoud easter egg", phrase(decide({ feels: -12, temp: -8, wind: 5, weatherCode: 0, rainSoonProb: 0 })).includes("IJskoud"));
+  check("30°+ rain -> tropical shower easter egg", phrase(decide({ feels: 31, temp: 32, wind: 5, weatherCode: 63, rainSoonProb: 80 })).includes("natter word je"));
+  check("30°+ thunder -> onweer still wins", phrase(decide({ feels: 31, temp: 32, wind: 5, weatherCode: 96, rainSoonProb: 80 })).includes("Onweer"));
 
   check("colder than yesterday", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: -5 })).includes("kouder dan gisteren"));
   check("warmer than yesterday", phrase(decide({ feels: 10, temp: 11, wind: 5, weatherCode: 0, rainSoonProb: 0, vsYesterday: 5 })).includes("warmer dan gisteren"));
