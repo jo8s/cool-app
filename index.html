@@ -264,7 +264,6 @@
     <ul class="suggest" id="suggest" role="listbox" aria-label="Plaatssuggesties"></ul>
   </div>
   <button class="geo" id="geo">📍 Gebruik mijn locatie</button>
-  <button class="geo" id="share">🔗 Kopieer deelbare link</button>
 
   <div class="footer">Weerdata: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · <span id="quip"></span></div>
 
@@ -771,19 +770,6 @@ $("suggest").addEventListener("click", e => {
   runResult(g);
 });
 document.addEventListener("click", e => { if (!e.target.closest(".place")) hideSuggest(); });
-
-// Copy the current shareable link to the clipboard.
-$("share").addEventListener("click", async () => {
-  const b = $("share");
-  try {
-    await navigator.clipboard.writeText(location.href);
-    const original = b.textContent;
-    b.textContent = "✓ Link gekopieerd!";
-    setTimeout(() => { b.textContent = original; }, 1600);
-  } catch {
-    prompt("Kopieer de link:", location.href);
-  }
-});
 $("geo").addEventListener("click", () => {
   if (!navigator.geolocation) { setError("Je browser deelt geen locatie."); return; }
   startLoading("Locatie ophalen…");

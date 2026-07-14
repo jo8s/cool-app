@@ -24,7 +24,6 @@ check("has hourly strip", html.includes('id="hours"') && /renderHours/.test(html
 check("has search suggestions", html.includes('id="suggest"') && /loadSuggest/.test(html) && html.includes("count=5"));
 check("compares with yesterday", html.includes("past_days=1") && html.includes("vsYesterday"));
 check("shareable ?plaats= link", html.includes('get("plaats")') && html.includes("history.replaceState"));
-check("copy-link button", html.includes('id="share"') && html.includes("clipboard.writeText"));
 check("has random footer quip", html.includes('id="quip"') && html.includes("geef de wolken de schuld"));
 check("cold quip only under 10°", html.includes('feels < 10') && html.includes("dat bouwt karakter"));
 check("hourly strip shows actual temp on tap/hover", html.includes("werkelijk ${Math.round(h.actual)}"));
