@@ -112,10 +112,12 @@
   .hours {
     display: flex;
     gap: 6px;
-    margin-top: 22px;
+    margin-top: 8px;
     max-width: min(560px, 92vw);
     overflow-x: auto;
-    padding: 2px 2px 8px;
+    /* top padding leaves room for the tooltip inside the scroll box, so it
+       isn't clipped (overflow-x:auto also clips vertically) */
+    padding: 32px 4px 8px;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
@@ -288,26 +290,20 @@ function decide({ feels, temp, wind, weatherCode, rainSoonProb, outlook }) {
   return { level, umbrella, weather: w, reasons, feels, temp, wind, outlook: outlook || null };
 }
 
-// Build a Dutch one-liner from the decision.
+// Build a short Dutch verdict line. Facts (temp, wind, weather) live in the
+// details row and the accessory icons, so this line stays punchy.
 function phrase(d) {
-  const t = Math.round(d.feels);
-  const base = [
-    `Lekker weer joh — ${t}° en niks aan de hand.`,
-    `Een vestje is genoeg, ${t}° gevoelstemperatuur.`,
-    `Ja, gewoon een jas. Het voelt als ${t}°.`,
-    `Winterjas aan! Het voelt als ${t}°.`,
-    `Het voelt als ${t}°. Overweeg gewoon binnen te blijven.`,
+  let line = [
+    "Lekker weer joh, niks aan de hand.",
+    "Een vestje is genoeg.",
+    "Ja, gewoon een jas.",
+    "Winterjas aan!",
+    "Serieus, blijf binnen.",
   ][d.level];
 
   // Fun edge cases
-  let line = base;
-  if (d.level === 0 && d.feels >= 26) line = `Een jas?? Ben je gek. Het voelt als ${t}°. 🩳`;
-  if (d.level === 4 && d.feels <= -5) line = `Het voelt als ${t}°. Doe de deur maar dicht. 🥶`;
-
-  if (d.reasons.length) {
-    line += " (" + d.reasons.join(", ") + ")";
-  }
-  if (d.umbrella) line += " Neem een paraplu ☔.";
+  if (d.level === 0 && d.feels >= 26) line = "Een jas?? Ben je gek. 🩳";
+  if (d.level === 4 && d.feels <= -5) line = "Doe de deur maar dicht. 🥶";
 
   // Day-ahead nuance: fire whenever the coat *category* changes later today.
   const o = d.outlook;
